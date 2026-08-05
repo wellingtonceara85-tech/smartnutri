@@ -34,6 +34,21 @@ export class UsersService {
     });
   }
 
+  /**
+   * Lista enxuta de nutricionistas ativos do tenant — acessível a
+   * qualquer perfil autenticado, para popular o seletor de "nutricionista
+   * responsável" no cadastro de pacientes.
+   */
+  async listNutritionistsForTenant(tenantId: string) {
+    const memberships = await this.prisma.userClinic.findMany({
+      where: { tenantId, isActive: true, role: Role.NUTRITIONIST },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: 'asc' } },
+    });
+
+    return memberships.map((m) => ({ id: m.user.id, name: m.user.name }));
+  }
+
   async createForTenant(tenantId: string, dto: CreateUserDto) {
     const email = dto.email.toLowerCase();
     const existingUser = await this.prisma.user.findUnique({

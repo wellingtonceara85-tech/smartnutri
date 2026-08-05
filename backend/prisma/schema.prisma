@@ -68,16 +68,17 @@ model User {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  userClinics         UserClinic[]
-  refreshTokens       RefreshToken[]
-  createdCycles       TreatmentCycle[]           @relation("CycleCreatedBy")
-  appointmentsAsNutri Appointment[]              @relation("AppointmentNutritionist")
-  statusChanges       AppointmentStatusHistory[]
-  createdPayments     Payment[]                  @relation("PaymentCreatedBy")
-  createdRefunds      Refund[]                   @relation("RefundCreatedBy")
-  createdEvolutions   PatientEvolution[]         @relation("EvolutionCreatedBy")
-  uploadedDocuments   Document[]                 @relation("DocumentUploadedBy")
-  auditLogEntries     AuditLog[]
+  userClinics           UserClinic[]
+  refreshTokens         RefreshToken[]
+  createdCycles         TreatmentCycle[]           @relation("CycleCreatedBy")
+  appointmentsAsNutri   Appointment[]              @relation("AppointmentNutritionist")
+  statusChanges         AppointmentStatusHistory[]
+  createdPayments       Payment[]                  @relation("PaymentCreatedBy")
+  createdRefunds        Refund[]                   @relation("RefundCreatedBy")
+  createdEvolutions     PatientEvolution[]         @relation("EvolutionCreatedBy")
+  uploadedDocuments     Document[]                 @relation("DocumentUploadedBy")
+  auditLogEntries       AuditLog[]
+  patientsAsResponsible Patient[]                  @relation("PatientResponsibleNutritionist")
 }
 
 model UserClinic {
@@ -133,9 +134,9 @@ model RefreshToken {
 // Pacientes / Catálogo
 // ==========================================================================
 
-enum PatientSex {
-  M
-  F
+enum Gender {
+  MALE
+  FEMALE
   OTHER
 }
 
@@ -148,60 +149,74 @@ enum PatientStatus {
 }
 
 model Patient {
-  id                    String        @id @default(uuid())
-  tenantId              String
-  fullName              String
-  socialName            String?
-  cpf                   String?
-  birthDate             DateTime?
-  sex                   PatientSex?
-  profession            String?
-  email                 String?
-  phone                 String?
-  whatsapp              String?
-  addressLine           String?
-  emergencyContactName  String?
-  emergencyContactPhone String?
-  adminNotes            String?
-  origin                String?
-  status                PatientStatus @default(ACTIVE)
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  deletedAt             DateTime?
+  id                        String        @id @default(uuid())
+  tenantId                  String
+  fullName                  String
+  socialName                String?
+  cpf                       String?
+  birthDate                 DateTime?
+  gender                    Gender?
+  occupation                String?
+  email                     String?
+  primaryPhone              String?
+  secondaryPhone            String?
+  whatsappPhone             String?
+  zipCode                   String?
+  street                    String?
+  number                    String?
+  complement                String?
+  neighborhood              String?
+  city                      String?
+  state                     String?
+  emergencyContactName      String?
+  emergencyContactPhone     String?
+  administrativeNotes       String?
+  source                    String?
+  responsibleNutritionistId String?
+  status                    PatientStatus @default(ACTIVE)
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+  deletedAt                 DateTime?
 
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  treatmentCycles   TreatmentCycle[]
-  appointments      Appointment[]
-  charges           Charge[]
-  payments          Payment[]
-  patientEvolutions PatientEvolution[]
-  documents         Document[]
+  tenant                  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  responsibleNutritionist User?              @relation("PatientResponsibleNutritionist", fields: [responsibleNutritionistId], references: [id])
+  treatmentCycles         TreatmentCycle[]
+  appointments            Appointment[]
+  charges                 Charge[]
+  payments                Payment[]
+  patientEvolutions       PatientEvolution[]
+  documents               Document[]
 
   @@unique([tenantId, cpf])
   @@index([tenantId, status])
+  @@index([tenantId, responsibleNutritionistId])
+  @@index([tenantId, fullName])
 }
 
 model Plan {
-  id                        String    @id @default(uuid())
-  tenantId                  String
-  name                      String
-  description               String?
-  durationMonths            Int
-  suggestedAppointmentCount Int
-  suggestedIntervalDays     Int
-  defaultPrice              Decimal   @db.Decimal(12, 2)
-  defaultInstallmentCount   Int
-  allowsDiscount            Boolean   @default(true)
-  isActive                  Boolean   @default(true)
-  notes                     String?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
-  deletedAt                 DateTime?
+  id                    String    @id @default(uuid())
+  tenantId              String
+  name                  String
+  description           String?
+  durationMonths        Int
+  suggestedAppointments Int
+  suggestedIntervalDays Int
+  defaultPrice          Decimal   @db.Decimal(12, 2)
+  defaultInstallments   Int
+  allowsDiscount        Boolean   @default(true)
+  isActive              Boolean   @default(true)
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
 
   tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   treatmentCycles TreatmentCycle[]
 
-  @@unique([tenantId, name])
+  // Unicidade de nome por tenant apenas entre planos não excluídos —
+  // constraint parcial adicionada via SQL manual na migration (Prisma não
+  // suporta índice único condicional na declaração do schema).
+  @@index([tenantId, name])
 }
 
 model AppointmentType {

@@ -36,6 +36,11 @@ export class UsersController {
     return this.usersService.createForTenant(tenantId, dto);
   }
 
+  @Get('nutritionists')
+  listNutritionists(@CurrentTenant() tenantId: string) {
+    return this.usersService.listNutritionistsForTenant(tenantId);
+  }
+
   @Get(':id')
   get(
     @CurrentTenant() tenantId: string,

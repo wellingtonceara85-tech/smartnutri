@@ -2,7 +2,7 @@
 CREATE TYPE "Role" AS ENUM ('ADMIN', 'NUTRITIONIST', 'RECEPTION');
 
 -- CreateEnum
-CREATE TYPE "PatientSex" AS ENUM ('M', 'F', 'OTHER');
+CREATE TYPE "Gender" AS ENUM ('MALE', 'FEMALE', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "PatientStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'PAUSED', 'DISCHARGED', 'ARCHIVED');
@@ -115,16 +115,24 @@ CREATE TABLE "Patient" (
     "socialName" TEXT,
     "cpf" TEXT,
     "birthDate" TIMESTAMP(3),
-    "sex" "PatientSex",
-    "profession" TEXT,
+    "gender" "Gender",
+    "occupation" TEXT,
     "email" TEXT,
-    "phone" TEXT,
-    "whatsapp" TEXT,
-    "addressLine" TEXT,
+    "primaryPhone" TEXT,
+    "secondaryPhone" TEXT,
+    "whatsappPhone" TEXT,
+    "zipCode" TEXT,
+    "street" TEXT,
+    "number" TEXT,
+    "complement" TEXT,
+    "neighborhood" TEXT,
+    "city" TEXT,
+    "state" TEXT,
     "emergencyContactName" TEXT,
     "emergencyContactPhone" TEXT,
-    "adminNotes" TEXT,
-    "origin" TEXT,
+    "administrativeNotes" TEXT,
+    "source" TEXT,
+    "responsibleNutritionistId" TEXT,
     "status" "PatientStatus" NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -140,10 +148,10 @@ CREATE TABLE "Plan" (
     "name" TEXT NOT NULL,
     "description" TEXT,
     "durationMonths" INTEGER NOT NULL,
-    "suggestedAppointmentCount" INTEGER NOT NULL,
+    "suggestedAppointments" INTEGER NOT NULL,
     "suggestedIntervalDays" INTEGER NOT NULL,
     "defaultPrice" DECIMAL(12,2) NOT NULL,
-    "defaultInstallmentCount" INTEGER NOT NULL,
+    "defaultInstallments" INTEGER NOT NULL,
     "allowsDiscount" BOOLEAN NOT NULL DEFAULT true,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "notes" TEXT,
@@ -402,10 +410,16 @@ CREATE INDEX "RefreshToken_userId_idx" ON "RefreshToken"("userId");
 CREATE INDEX "Patient_tenantId_status_idx" ON "Patient"("tenantId", "status");
 
 -- CreateIndex
+CREATE INDEX "Patient_tenantId_responsibleNutritionistId_idx" ON "Patient"("tenantId", "responsibleNutritionistId");
+
+-- CreateIndex
+CREATE INDEX "Patient_tenantId_fullName_idx" ON "Patient"("tenantId", "fullName");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Patient_tenantId_cpf_key" ON "Patient"("tenantId", "cpf");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Plan_tenantId_name_key" ON "Plan"("tenantId", "name");
+CREATE INDEX "Plan_tenantId_name_idx" ON "Plan"("tenantId", "name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "AppointmentType_tenantId_name_key" ON "AppointmentType"("tenantId", "name");
@@ -481,6 +495,9 @@ ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "Patient" ADD CONSTRAINT "Patient_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Patient" ADD CONSTRAINT "Patient_responsibleNutritionistId_fkey" FOREIGN KEY ("responsibleNutritionistId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Plan" ADD CONSTRAINT "Plan_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -8,7 +8,7 @@ export default function ForbiddenPage() {
       <ShieldAlert className="size-12 text-muted-foreground" />
       <h1 className="text-2xl font-semibold">Acesso não permitido</h1>
       <p className="max-w-sm text-muted-foreground">Seu perfil não tem permissão para acessar esta página.</p>
-      <Button render={<Link href="/dashboard">Voltar ao painel</Link>} />
+      <Button nativeButton={false} render={<Link href="/dashboard">Voltar ao painel</Link>} />
     </div>
   );
 }
