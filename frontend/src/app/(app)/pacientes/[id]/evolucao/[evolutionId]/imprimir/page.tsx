@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BODY_SEGMENT_LABELS, BodySegmentMap, type BodySegmentId, type BodySilhouette } from '@/components/body-segment-map';
+import type { BodySilhouette } from '@/components/body-segment-map';
+import { SegmentalBodyAnalysisCard } from '@/components/segmental-body-analysis-card';
 import { getEvolution } from '@/lib/api/evolutions';
 import { getPatient } from '@/lib/api/patients';
 import { getProfessionalProfile } from '@/lib/api/professional-profile';
@@ -67,8 +68,6 @@ export default function ImprimirAvaliacaoPage({ params }: { params: Promise<{ id
   const age = formatAge(patient.birthDate);
   const silhouette =
     patient.bodySilhouettePreference === 'NOT_INFORMED' ? suggestSilhouette(patient.gender) : patient.bodySilhouettePreference;
-  const segmentColors: Partial<Record<BodySegmentId, string>> = {};
-  for (const m of evolution.segmentalMeasurements) segmentColors[m.segment] = 'var(--secondary)';
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 print:max-w-none">
@@ -224,30 +223,8 @@ export default function ImprimirAvaliacaoPage({ params }: { params: Promise<{ id
       )}
 
       {evolution.segmentalMeasurements.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold">Análise segmentar</h3>
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <BodySegmentMap silhouette={silhouette} size={140} segmentColors={segmentColors} />
-            <table className="w-full border-collapse text-sm">
-              <tbody>
-                {(['RIGHT_ARM', 'LEFT_ARM', 'TRUNK', 'RIGHT_LEG', 'LEFT_LEG'] as BodySegmentId[]).map((segment) => {
-                  const fat = evolution.segmentalMeasurements.find((m) => m.segment === segment && m.metricType === 'FAT_MASS_KG');
-                  const lean = evolution.segmentalMeasurements.find((m) => m.segment === segment && m.metricType === 'LEAN_MASS_KG');
-                  if (!fat && !lean) return null;
-                  return (
-                    <tr key={segment} className="border-b">
-                      <td className="py-1.5 text-muted-foreground">{BODY_SEGMENT_LABELS[segment]}</td>
-                      <td className="py-1.5 text-right font-medium">
-                        {fat && `${fat.valueKg} kg gordura${fat.isEstimated ? ' (estimado)' : ''}`}
-                        {fat && lean && ' · '}
-                        {lean && `${lean.valueKg} kg magra`}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <section className="print:break-inside-avoid">
+          <SegmentalBodyAnalysisCard silhouette={silhouette} current={evolution} />
         </section>
       )}
 

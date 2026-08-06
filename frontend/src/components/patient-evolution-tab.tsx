@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BODY_SEGMENT_LABELS, BodySegmentMap, type BodySegmentId, type BodySilhouette } from '@/components/body-segment-map';
+import type { BodySilhouette } from '@/components/body-segment-map';
 import { EvolutionMetricChart } from '@/components/evolution-metric-chart';
+import { SegmentalBodyAnalysisCard } from '@/components/segmental-body-analysis-card';
 import { listEvolutions } from '@/lib/api/evolutions';
 import { updatePatientSilhouette } from '@/lib/api/patients';
 import { ApiError } from '@/lib/api-client';
@@ -73,23 +74,8 @@ export function PatientEvolutionTab({ patient }: { patient: PatientDetail }) {
 
   const evolutions = evolutionsQuery.data ?? [];
   const latest = evolutions[0];
+  const previous = evolutions[1] ?? null;
   const overviewMetrics = METRIC_CATALOG.filter((m) => OVERVIEW_METRIC_KEYS.includes(m.key));
-
-  const segmentColors: Partial<Record<BodySegmentId, string>> = {};
-  const segmentLegend: { segment: BodySegmentId; fatMassKg?: string; leanMassKg?: string }[] = [];
-  if (latest) {
-    const bySegment = new Map<BodySegmentId, { fatMassKg?: string; leanMassKg?: string }>();
-    for (const measurement of latest.segmentalMeasurements) {
-      const entry = bySegment.get(measurement.segment) ?? {};
-      if (measurement.metricType === 'FAT_MASS_KG') entry.fatMassKg = measurement.valueKg;
-      else entry.leanMassKg = measurement.valueKg;
-      bySegment.set(measurement.segment, entry);
-    }
-    for (const [segment, values] of bySegment.entries()) {
-      segmentColors[segment] = 'var(--secondary)';
-      segmentLegend.push({ segment, ...values });
-    }
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -125,76 +111,56 @@ export function PatientEvolutionTab({ patient }: { patient: PatientDetail }) {
             ))}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Mapa corporal</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center gap-4">
-                <BodySegmentMap silhouette={silhouette} size={180} segmentColors={segmentColors} />
-                <div className="flex gap-2">
-                  {SILHOUETTE_OPTIONS.map((option) => (
-                    <Button
-                      key={option.value}
-                      type="button"
-                      size="sm"
-                      variant={silhouette === option.value ? 'default' : 'outline'}
-                      onClick={() => handleSilhouetteChange(option.value)}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-                {segmentLegend.length > 0 && (
-                  <div className="w-full space-y-1 text-xs text-muted-foreground">
-                    <p className="font-medium text-foreground">Última análise segmentar</p>
-                    {segmentLegend.map(({ segment, fatMassKg, leanMassKg }) => (
-                      <div key={segment} className="flex justify-between gap-2">
-                        <span>{BODY_SEGMENT_LABELS[segment]}</span>
-                        <span>
-                          {fatMassKg ? `${fatMassKg} kg gordura` : ''}
-                          {fatMassKg && leanMassKg ? ' · ' : ''}
-                          {leanMassKg ? `${leanMassKg} kg magra` : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Histórico de avaliações</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col divide-y p-0">
-                {evolutions.map((evolution) => (
-                  <Link
-                    key={evolution.id}
-                    href={`/pacientes/${patient.id}/evolucao/${evolution.id}`}
-                    className="flex items-center justify-between gap-3 p-4 text-sm hover:bg-muted"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {formatCalendarDate(evolution.assessmentDate)}
-                        {evolution.title && <span className="text-muted-foreground"> — {evolution.title}</span>}
-                      </p>
-                      <p className="text-muted-foreground">{evolution.nutritionistUser.name}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {evolution.isSharedWithPatient && (
-                        <Badge variant="secondary">
-                          <Share2 className="size-3" />
-                          Compartilhada
-                        </Badge>
-                      )}
-                      {evolution.anthropometry?.weightKg && <span className="text-muted-foreground">{evolution.anthropometry.weightKg} kg</span>}
-                    </div>
-                  </Link>
-                ))}
-              </CardContent>
-            </Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">Silhueta exibida na análise segmentar</p>
+            <div className="flex gap-2">
+              {SILHOUETTE_OPTIONS.map((option) => (
+                <Button
+                  key={option.value}
+                  type="button"
+                  size="sm"
+                  variant={silhouette === option.value ? 'default' : 'outline'}
+                  onClick={() => handleSilhouetteChange(option.value)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
           </div>
+
+          <SegmentalBodyAnalysisCard silhouette={silhouette} current={latest} previous={previous} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Histórico de avaliações</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col divide-y p-0">
+              {evolutions.map((evolution) => (
+                <Link
+                  key={evolution.id}
+                  href={`/pacientes/${patient.id}/evolucao/${evolution.id}`}
+                  className="flex items-center justify-between gap-3 p-4 text-sm hover:bg-muted"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {formatCalendarDate(evolution.assessmentDate)}
+                      {evolution.title && <span className="text-muted-foreground"> — {evolution.title}</span>}
+                    </p>
+                    <p className="text-muted-foreground">{evolution.nutritionistUser.name}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {evolution.isSharedWithPatient && (
+                      <Badge variant="secondary">
+                        <Share2 className="size-3" />
+                        Compartilhada
+                      </Badge>
+                    )}
+                    {evolution.anthropometry?.weightKg && <span className="text-muted-foreground">{evolution.anthropometry.weightKg} kg</span>}
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
