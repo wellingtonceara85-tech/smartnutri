@@ -8,7 +8,7 @@ import {
   IsUUID,
   MinLength,
 } from 'class-validator';
-import { Gender } from '../../../generated/prisma/client';
+import { Gender, SilhouettePreference } from '../../../generated/prisma/client';
 import { IsValidCpf } from '../../../common/validators/is-valid-cpf.decorator';
 import { IsValidPhone } from '../../../common/validators/is-valid-phone.decorator';
 
@@ -40,6 +40,16 @@ export class CreatePatientDto {
   @IsOptional()
   @IsEnum(Gender)
   gender?: Gender;
+
+  @ApiProperty({
+    required: false,
+    enum: SilhouettePreference,
+    description:
+      'Preferência de silhueta para o mapa corporal — nunca inferida automaticamente do gênero.',
+  })
+  @IsOptional()
+  @IsEnum(SilhouettePreference)
+  bodySilhouettePreference?: SilhouettePreference;
 
   @ApiProperty({ required: false })
   @IsOptional()

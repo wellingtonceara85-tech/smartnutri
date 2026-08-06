@@ -17,11 +17,15 @@ interface ApiFetchOptions extends RequestInit {
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { accessToken, headers, ...rest } = options;
 
+  // FormData define seu próprio Content-Type (com boundary) — o navegador
+  // cuida disso sozinho; setar manualmente quebra o multipart.
+  const isFormData = typeof FormData !== 'undefined' && rest.body instanceof FormData;
+
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...headers,
     },

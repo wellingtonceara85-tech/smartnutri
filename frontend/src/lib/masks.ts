@@ -29,6 +29,19 @@ export function buildWhatsAppLink(phone: string): string {
   return `https://wa.me/${withCountryCode}`;
 }
 
+/**
+ * Formata uma data "só calendário" (ex.: `PatientEvolution.assessmentDate`)
+ * usando os dígitos gravados diretamente, sem passar por `Date`/fuso local.
+ * O backend grava esse campo como `DATE` puro (meia-noite UTC); convertê-lo
+ * para `Date` e formatar com `toLocaleDateString` usa o fuso do navegador e
+ * pode exibir o dia anterior para quem está a oeste de UTC. Fatiar a string
+ * ISO evita esse problema por completo.
+ */
+export function formatCalendarDate(isoValue: string, yearFormat: 'numeric' | '2-digit' = 'numeric'): string {
+  const [year, month, day] = isoValue.slice(0, 10).split('-');
+  return `${day}/${month}/${yearFormat === '2-digit' ? year.slice(-2) : year}`;
+}
+
 export function formatAge(birthDateIso: string | null | undefined): number | null {
   if (!birthDateIso) return null;
   const birthDate = new Date(birthDateIso);

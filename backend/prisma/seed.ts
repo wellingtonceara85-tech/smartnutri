@@ -1,7 +1,12 @@
 import 'dotenv/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { Gender, PatientStatus, PrismaClient, Role } from '../src/generated/prisma/client';
+import {
+  Gender,
+  PatientStatus,
+  PrismaClient,
+  Role,
+} from '../src/generated/prisma/client';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -14,7 +19,8 @@ const BCRYPT_ROUNDS = 12;
 function buildFakeCpf(base9: string): string {
   const calcDigit = (digits: string, weightStart: number): number => {
     let sum = 0;
-    for (let i = 0; i < digits.length; i++) sum += Number(digits[i]) * (weightStart - i);
+    for (let i = 0; i < digits.length; i++)
+      sum += Number(digits[i]) * (weightStart - i);
     const remainder = sum % 11;
     return remainder < 2 ? 0 : 11 - remainder;
   };
@@ -23,16 +29,21 @@ function buildFakeCpf(base9: string): string {
   return `${base9}${d1}${d2}`;
 }
 
-async function upsertPlan(tenantId: string, data: {
-  name: string;
-  description: string;
-  durationMonths: number;
-  suggestedAppointments: number;
-  suggestedIntervalDays: number;
-  defaultPrice: number;
-  defaultInstallments: number;
-}) {
-  const existing = await prisma.plan.findFirst({ where: { tenantId, name: data.name, deletedAt: null } });
+async function upsertPlan(
+  tenantId: string,
+  data: {
+    name: string;
+    description: string;
+    durationMonths: number;
+    suggestedAppointments: number;
+    suggestedIntervalDays: number;
+    defaultPrice: number;
+    defaultInstallments: number;
+  },
+) {
+  const existing = await prisma.plan.findFirst({
+    where: { tenantId, name: data.name, deletedAt: null },
+  });
   if (existing) {
     return prisma.plan.update({ where: { id: existing.id }, data });
   }
@@ -46,23 +57,57 @@ async function main() {
     where: { slug: 'clinica-demo' },
     update: {},
     create: {
-      name: 'Clínica Bem Nutrir (Demo)',
+      name: 'Ambiente demo SmartNutri',
       slug: 'clinica-demo',
       email: 'contato@clinicademo.com.br',
       phone: '(11) 4000-0000',
       addressLine: 'Rua das Flores, 123',
       city: 'São Paulo',
       state: 'SP',
-      cancellationPolicyText: 'Cancelamentos devem ser avisados com pelo menos 24h de antecedência.',
+      cancellationPolicyText:
+        'Cancelamentos devem ser avisados com pelo menos 24h de antecedência.',
       cancellationMinHoursNotice: 24,
       receiptNumberPrefix: 'REC',
     },
   });
 
+  // Identidade do profissional — nome fictício de demonstração, nunca um
+  // nome de clínica fixo; o tenant acima é só infraestrutura multi-empresa.
+  await prisma.professionalProfile.upsert({
+    where: { tenantId: tenant.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      displayName: 'Nutri Nutricionista',
+      professionalName: 'Nutri Nutricionista',
+      professionalTitle: 'Nutricionista Clínica',
+      crnNumber: '12345',
+      crnState: 'SP',
+      specialty: 'Nutrição clínica e comportamental',
+      shortBio:
+        'Atendimento nutricional individualizado, com acompanhamento de evolução corporal.',
+      primaryPhone: '(11) 4000-0000',
+      whatsappPhone: '(11) 98888-0000',
+      email: 'nutricionista@clinicademo.com.br',
+    },
+  });
+
   const demoUsers: { name: string; email: string; role: Role }[] = [
-    { name: 'Ana Administradora', email: 'admin@clinicademo.com.br', role: Role.ADMIN },
-    { name: 'Nutri Nutricionista', email: 'nutricionista@clinicademo.com.br', role: Role.NUTRITIONIST },
-    { name: 'Rita Recepção', email: 'recepcao@clinicademo.com.br', role: Role.RECEPTION },
+    {
+      name: 'Ana Administradora',
+      email: 'admin@clinicademo.com.br',
+      role: Role.ADMIN,
+    },
+    {
+      name: 'Nutri Nutricionista',
+      email: 'nutricionista@clinicademo.com.br',
+      role: Role.NUTRITIONIST,
+    },
+    {
+      name: 'Rita Recepção',
+      email: 'recepcao@clinicademo.com.br',
+      role: Role.RECEPTION,
+    },
   ];
 
   const userIdByEmail = new Map<string, string>();
@@ -82,9 +127,19 @@ async function main() {
     });
   }
 
-  const nutritionistUserId = userIdByEmail.get('nutricionista@clinicademo.com.br')!;
+  const nutritionistUserId = userIdByEmail.get(
+    'nutricionista@clinicademo.com.br',
+  )!;
 
-  const paymentMethods = ['PIX', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'Transferência', 'Boleto', 'Outro'];
+  const paymentMethods = [
+    'PIX',
+    'Dinheiro',
+    'Cartão de Crédito',
+    'Cartão de Débito',
+    'Transferência',
+    'Boleto',
+    'Outro',
+  ];
   for (const name of paymentMethods) {
     await prisma.paymentMethod.upsert({
       where: { tenantId_name: { tenantId: tenant.id, name } },
@@ -105,7 +160,11 @@ async function main() {
     await prisma.appointmentType.upsert({
       where: { tenantId_name: { tenantId: tenant.id, name: type.name } },
       update: {},
-      create: { tenantId: tenant.id, name: type.name, defaultDurationMinutes: type.defaultDurationMinutes },
+      create: {
+        tenantId: tenant.id,
+        name: type.name,
+        defaultDurationMinutes: type.defaultDurationMinutes,
+      },
     });
   }
 
@@ -196,16 +255,181 @@ async function main() {
     },
   ];
 
+  const patientIdByName = new Map<string, string>();
   for (const patient of patients) {
-    const existing = await prisma.patient.findFirst({ where: { tenantId: tenant.id, fullName: patient.fullName } });
-    if (!existing) {
-      await prisma.patient.create({ data: { ...patient, tenantId: tenant.id } });
-    }
+    const existing = await prisma.patient.findFirst({
+      where: { tenantId: tenant.id, fullName: patient.fullName },
+    });
+    const record =
+      existing ??
+      (await prisma.patient.create({
+        data: { ...patient, tenantId: tenant.id },
+      }));
+    patientIdByName.set(patient.fullName, record.id);
+  }
+
+  // Evolução corporal de exemplo — três avaliações independentes de Beatriz,
+  // mostrando queda de peso/gordura ao longo do tempo (histórico + comparação + gráficos).
+  const beatrizId = patientIdByName.get('Beatriz Almeida Santos')!;
+  await prisma.patient.update({
+    where: { id: beatrizId },
+    data: { bodySilhouettePreference: 'FEMALE' },
+  });
+
+  const evolutionSeeds = [
+    {
+      daysAgo: 90,
+      weightKg: 78,
+      waistCm: 88,
+      hipCm: 108,
+      bodyFatPercent: 34,
+      muscleMassKg: 24,
+    },
+    {
+      daysAgo: 45,
+      weightKg: 75,
+      waistCm: 84,
+      hipCm: 105,
+      bodyFatPercent: 31,
+      muscleMassKg: 24.5,
+    },
+    {
+      daysAgo: 5,
+      weightKg: 72,
+      waistCm: 80,
+      hipCm: 102,
+      bodyFatPercent: 27,
+      muscleMassKg: 25.5,
+    },
+  ];
+
+  for (const seedData of evolutionSeeds) {
+    const assessmentDate = new Date(
+      Date.now() - seedData.daysAgo * 24 * 60 * 60 * 1000,
+    );
+    const heightCm = 165;
+    const bmi =
+      Math.round((seedData.weightKg / (heightCm / 100) ** 2) * 100) / 100;
+
+    const existingEvolution = await prisma.patientEvolution.findFirst({
+      where: { tenantId: tenant.id, patientId: beatrizId, assessmentDate },
+    });
+    if (existingEvolution) continue;
+
+    await prisma.patientEvolution.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        nutritionistUserId,
+        createdByUserId: nutritionistUserId,
+        assessmentDate,
+        title: seedData.daysAgo === 90 ? 'Avaliação inicial' : undefined,
+        objective: 'Redução de gordura corporal com manutenção de massa magra',
+        anthropometry: {
+          create: {
+            tenantId: tenant.id,
+            weightKg: seedData.weightKg,
+            heightCm,
+            bmi,
+            bmiClassification:
+              bmi < 25
+                ? 'Peso adequado'
+                : bmi < 30
+                  ? 'Sobrepeso'
+                  : 'Obesidade grau I',
+            waistCm: seedData.waistCm,
+            hipCm: seedData.hipCm,
+          },
+        },
+        bioimpedance: {
+          create: {
+            tenantId: tenant.id,
+            bodyFatPercent: seedData.bodyFatPercent,
+            muscleMassKg: seedData.muscleMassKg,
+            bodyWaterPercent: 52,
+            // Campos abaixo só na avaliação mais recente — mostra o preenchimento completo sem repetir em todas.
+            ...(seedData.daysAgo === 5
+              ? {
+                  proteinKg: 10.8,
+                  mineralMassKg: 3.1,
+                  boneMassKg: 2.6,
+                  visceralFatLevel: 6,
+                  obesityDegreePercent: 108,
+                  bodyCompositionScore: 84,
+                  bodyCompositionScoreMaximum: 100,
+                  bodyCompositionScoreLabel: 'Pontuação da composição corporal',
+                  bodyCompositionScoreSource: 'Bioimpedância de demonstração',
+                  referenceWeightKg: 68,
+                  recommendedWeightChangeKg: -4,
+                  recommendedFatChangeKg: -6,
+                  recommendedMuscleChangeKg: 2,
+                  segmentalImpedanceMeasurements: {
+                    create: [
+                      {
+                        tenantId: tenant.id,
+                        frequencyValue: 20,
+                        rightArmOhms: 205,
+                        leftArmOhms: 208,
+                        trunkOhms: 19,
+                        rightLegOhms: 178,
+                        leftLegOhms: 181,
+                      },
+                      {
+                        tenantId: tenant.id,
+                        frequencyValue: 100,
+                        rightArmOhms: 180,
+                        leftArmOhms: 183,
+                        trunkOhms: 16,
+                        rightLegOhms: 156,
+                        leftLegOhms: 159,
+                      },
+                    ],
+                  },
+                }
+              : {}),
+          },
+        },
+        segmentalMeasurements: {
+          create: [
+            {
+              tenantId: tenant.id,
+              segment: 'TRUNK',
+              metricType: 'FAT_MASS_KG',
+              valueKg: seedData.weightKg * 0.18,
+              isEstimated: true,
+            },
+            {
+              tenantId: tenant.id,
+              segment: 'TRUNK',
+              metricType: 'LEAN_MASS_KG',
+              valueKg: seedData.muscleMassKg * 0.4,
+            },
+          ],
+        },
+        referenceRanges:
+          seedData.daysAgo === 5
+            ? {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    fieldKey: 'bodyWaterLiters',
+                    minValue: 30,
+                    maxValue: 37,
+                    unit: 'L',
+                    source: 'Bioimpedância de demonstração',
+                  },
+                ],
+              }
+            : undefined,
+      },
+    });
   }
 
   console.log('Seed concluído.');
   console.log(`Clínica demo: ${tenant.name} (${tenant.slug})`);
-  console.log('Usuários de demonstração (senha para todos: ' + DEMO_PASSWORD + '):');
+  console.log(
+    'Usuários de demonstração (senha para todos: ' + DEMO_PASSWORD + '):',
+  );
   for (const demoUser of demoUsers) {
     console.log(`  - ${demoUser.role}: ${demoUser.email}`);
   }

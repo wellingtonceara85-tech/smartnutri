@@ -45,6 +45,7 @@ export interface PatientDetail {
   cpf: string | null;
   birthDate: string | null;
   gender: Gender | null;
+  bodySilhouettePreference: 'MALE' | 'FEMALE' | 'NEUTRAL' | 'NOT_INFORMED';
   occupation: string | null;
   email: string | null;
   primaryPhone: string | null;
@@ -151,4 +152,268 @@ export interface PlanFormValues {
 export interface NutritionistOption {
   id: string;
   name: string;
+}
+
+export interface ProfessionalProfile {
+  id: string;
+  tenantId: string;
+  displayName: string;
+  professionalName: string;
+  professionalTitle: string | null;
+  crnNumber: string | null;
+  crnState: string | null;
+  specialty: string | null;
+  shortBio: string | null;
+  profilePhotoKey: string | null;
+  profilePhotoUrl: string | null;
+  logoKey: string | null;
+  logoUrl: string | null;
+  primaryPhone: string | null;
+  whatsappPhone: string | null;
+  email: string | null;
+  instagram: string | null;
+  website: string | null;
+  companyName: string | null;
+  legalName: string | null;
+  documentNumber: string | null;
+  addressLine: string | null;
+  paletteKey: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type UpdateProfessionalProfileValues = Partial<
+  Pick<
+    ProfessionalProfile,
+    | 'displayName'
+    | 'professionalName'
+    | 'professionalTitle'
+    | 'crnNumber'
+    | 'crnState'
+    | 'specialty'
+    | 'shortBio'
+    | 'primaryPhone'
+    | 'whatsappPhone'
+    | 'email'
+    | 'instagram'
+    | 'website'
+    | 'companyName'
+    | 'legalName'
+    | 'documentNumber'
+    | 'addressLine'
+    | 'paletteKey'
+    | 'primaryColor'
+    | 'secondaryColor'
+  >
+>;
+
+export interface ProfessionalPalettePreset {
+  key: string;
+  label: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+export const PROFESSIONAL_PALETTE_PRESETS: ProfessionalPalettePreset[] = [
+  { key: 'sage', label: 'Sálvia', primaryColor: '#3F7658', secondaryColor: '#8CAF9A' },
+  { key: 'ocean', label: 'Oceano', primaryColor: '#2A6F97', secondaryColor: '#89C2D9' },
+  { key: 'terracotta', label: 'Terracota', primaryColor: '#B4592C', secondaryColor: '#E0A377' },
+  { key: 'plum', label: 'Ameixa', primaryColor: '#7A4069', secondaryColor: '#C08AAE' },
+  { key: 'slate', label: 'Ardósia', primaryColor: '#3E5164', secondaryColor: '#94A7B8' },
+  { key: 'amber', label: 'Âmbar', primaryColor: '#B3801A', secondaryColor: '#E5C07B' },
+];
+
+export type BodySegmentEnum = 'RIGHT_ARM' | 'LEFT_ARM' | 'TRUNK' | 'RIGHT_LEG' | 'LEFT_LEG';
+export type SegmentalMetricTypeEnum = 'FAT_MASS_KG' | 'LEAN_MASS_KG';
+export type EvolutionPhotoTypeEnum = 'FRONT' | 'BACK' | 'RIGHT_PROFILE' | 'LEFT_PROFILE' | 'OTHER';
+export type SilhouettePreference = 'MALE' | 'FEMALE' | 'NEUTRAL' | 'NOT_INFORMED';
+
+export const EVOLUTION_PHOTO_TYPE_LABELS: Record<EvolutionPhotoTypeEnum, string> = {
+  FRONT: 'Frente',
+  BACK: 'Costas',
+  RIGHT_PROFILE: 'Perfil direito',
+  LEFT_PROFILE: 'Perfil esquerdo',
+  OTHER: 'Outra',
+};
+
+export interface AnthropometricMeasurement {
+  weightKg: string | null;
+  heightCm: string | null;
+  bmi: string | null;
+  bmiClassification: string | null;
+  desiredWeightKg: string | null;
+  neckCm: string | null;
+  shoulderCm: string | null;
+  chestCm: string | null;
+  waistCm: string | null;
+  abdomenCm: string | null;
+  hipCm: string | null;
+  gluteCm: string | null;
+  rightArmCm: string | null;
+  leftArmCm: string | null;
+  rightForearmCm: string | null;
+  leftForearmCm: string | null;
+  rightThighCm: string | null;
+  leftThighCm: string | null;
+  rightCalfCm: string | null;
+  leftCalfCm: string | null;
+  tricepsSkinfoldMm: string | null;
+  bicepsSkinfoldMm: string | null;
+  subscapularSkinfoldMm: string | null;
+  suprailiacSkinfoldMm: string | null;
+  abdominalSkinfoldMm: string | null;
+  chestSkinfoldMm: string | null;
+  midaxillarySkinfoldMm: string | null;
+  thighSkinfoldMm: string | null;
+  calfSkinfoldMm: string | null;
+}
+
+export interface BioimpedanceMeasurement {
+  bodyFatPercent: string | null;
+  fatMassKg: string | null;
+  leanMassKg: string | null;
+  muscleMassKg: string | null;
+  skeletalMuscleMassKg: string | null;
+  musclePercent: string | null;
+  bodyWaterLiters: string | null;
+  bodyWaterPercent: string | null;
+  proteinKg: string | null;
+  proteinPercent: string | null;
+  mineralMassKg: string | null;
+  boneMassKg: string | null;
+  visceralFatLevel: string | null;
+  basalMetabolicRateKcal: number | null;
+  metabolicAge: number | null;
+  waistHipRatio: string | null;
+  obesityDegreePercent: string | null;
+  bodyType: string | null;
+  impedanceOhms: string | null;
+  deviceManufacturer: string | null;
+  notes: string | null;
+  bodyCompositionScore: number | null;
+  bodyCompositionScoreMaximum: number | null;
+  bodyCompositionScoreLabel: string | null;
+  bodyCompositionScoreSource: string | null;
+  referenceWeightKg: string | null;
+  recommendedWeightChangeKg: string | null;
+  recommendedFatChangeKg: string | null;
+  recommendedMuscleChangeKg: string | null;
+  segmentalImpedanceMeasurements: SegmentalImpedanceMeasurement[];
+}
+
+export interface SegmentalBodyMeasurement {
+  id: string;
+  segment: BodySegmentEnum;
+  metricType: SegmentalMetricTypeEnum;
+  valueKg: string;
+  isEstimated: boolean;
+  referenceMinKg: string | null;
+  referenceMaxKg: string | null;
+}
+
+export interface SegmentalImpedanceMeasurement {
+  id: string;
+  frequencyValue: string;
+  frequencyUnit: string;
+  rightArmOhms: string | null;
+  leftArmOhms: string | null;
+  trunkOhms: string | null;
+  rightLegOhms: string | null;
+  leftLegOhms: string | null;
+  impedanceUnit: string;
+  deviceManufacturer: string | null;
+  notes: string | null;
+}
+
+export interface MeasurementReferenceRange {
+  id: string;
+  fieldKey: string;
+  minValue: string | null;
+  maxValue: string | null;
+  unit: string | null;
+  source: string | null;
+  note: string | null;
+}
+
+export interface EvolutionPhoto {
+  id: string;
+  type: EvolutionPhotoTypeEnum;
+  url: string;
+  createdAt: string;
+}
+
+export interface PatientEvolution {
+  id: string;
+  patientId: string;
+  assessmentDate: string;
+  assessmentTime: string | null;
+  title: string | null;
+  objective: string | null;
+  clinicalNotes: string | null;
+  internalNotes: string | null;
+  patientVisibleNotes: string | null;
+  isSharedWithPatient: boolean;
+  status: 'ACTIVE' | 'ARCHIVED';
+  nutritionistUser: { id: string; name: string };
+  createdByUser: { id: string; name: string };
+  anthropometry: AnthropometricMeasurement | null;
+  bioimpedance: BioimpedanceMeasurement | null;
+  segmentalMeasurements: SegmentalBodyMeasurement[];
+  referenceRanges: MeasurementReferenceRange[];
+  photos: EvolutionPhoto[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EvolutionFormAnthropometry = Partial<Record<keyof AnthropometricMeasurement, number>>;
+export type EvolutionFormBioimpedance = Partial<
+  Record<Exclude<keyof BioimpedanceMeasurement, 'bodyType' | 'deviceManufacturer' | 'notes' | 'bodyCompositionScoreLabel' | 'bodyCompositionScoreSource' | 'segmentalImpedanceMeasurements'>, number>
+>;
+
+export interface EvolutionFormSegmentalMeasurement {
+  segment: BodySegmentEnum;
+  metricType: SegmentalMetricTypeEnum;
+  valueKg: number;
+  isEstimated?: boolean;
+  referenceMinKg?: number;
+  referenceMaxKg?: number;
+}
+
+export interface EvolutionFormSegmentalImpedance {
+  frequencyValue: number;
+  frequencyUnit?: string;
+  rightArmOhms?: number;
+  leftArmOhms?: number;
+  trunkOhms?: number;
+  rightLegOhms?: number;
+  leftLegOhms?: number;
+  impedanceUnit?: string;
+  deviceManufacturer?: string;
+  notes?: string;
+}
+
+export interface EvolutionFormReferenceRange {
+  fieldKey: string;
+  minValue?: number;
+  maxValue?: number;
+  unit?: string;
+  source?: string;
+  note?: string;
+}
+
+export interface EvolutionFormValues {
+  assessmentDate: string;
+  assessmentTime?: string;
+  title?: string;
+  objective?: string;
+  clinicalNotes?: string;
+  internalNotes?: string;
+  nutritionistUserId?: string;
+  anthropometry?: EvolutionFormAnthropometry;
+  bioimpedance?: EvolutionFormBioimpedance & { bodyType?: string; deviceManufacturer?: string; notes?: string };
+  segmentalMeasurements?: EvolutionFormSegmentalMeasurement[];
+  segmentalImpedanceMeasurements?: EvolutionFormSegmentalImpedance[];
+  referenceRanges?: EvolutionFormReferenceRange[];
 }

@@ -26,8 +26,10 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Clínica de Nutrição API')
-    .setDescription('API do sistema de gestão para clínica de nutrição')
+    .setTitle('SmartNutri API')
+    .setDescription(
+      'API do SmartNutri — cadastro de pacientes, planos e evolução corporal para nutricionistas',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

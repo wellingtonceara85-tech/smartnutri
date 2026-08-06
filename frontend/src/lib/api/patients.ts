@@ -37,6 +37,18 @@ export function updatePatient(accessToken: string, id: string, data: Partial<Pat
   return apiFetch<PatientDetail>(`/patients/${id}`, { method: 'PATCH', accessToken, body: JSON.stringify(data) });
 }
 
+export function updatePatientSilhouette(
+  accessToken: string,
+  id: string,
+  bodySilhouettePreference: PatientDetail['bodySilhouettePreference'],
+) {
+  return apiFetch<PatientDetail>(`/patients/${id}`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify({ bodySilhouettePreference }),
+  });
+}
+
 export function updatePatientStatus(accessToken: string, id: string, status: PatientStatus, reason?: string) {
   return apiFetch<PatientDetail>(`/patients/${id}/status`, {
     method: 'PATCH',

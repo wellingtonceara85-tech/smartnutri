@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PatientEvolutionTab } from '@/components/patient-evolution-tab';
 import { PatientStatusBadge } from '@/components/patient-status-badge';
 import { getPatient } from '@/lib/api/patients';
 import { ApiError } from '@/lib/api-client';
@@ -42,7 +43,8 @@ function initials(name: string) {
 
 export default function PacienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
+  const canSeeEvolution = user?.role === 'ADMIN' || user?.role === 'NUTRITIONIST';
 
   const patientQuery = useQuery({
     queryKey: ['patient', id],
@@ -128,7 +130,7 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
           <TabsTrigger value="cycles">Ciclos e planos</TabsTrigger>
           <TabsTrigger value="appointments">Consultas</TabsTrigger>
           <TabsTrigger value="financial">Financeiro</TabsTrigger>
-          <TabsTrigger value="evolution">Evolução</TabsTrigger>
+          {canSeeEvolution && <TabsTrigger value="evolution">Evolução</TabsTrigger>}
           <TabsTrigger value="documents">Documentos</TabsTrigger>
           <TabsTrigger value="history">Histórico</TabsTrigger>
         </TabsList>
@@ -200,9 +202,11 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
         <TabsContent value="financial">
           <EmptyTab message="Nenhuma movimentação financeira registrada ainda — disponível em uma próxima etapa." />
         </TabsContent>
-        <TabsContent value="evolution">
-          <EmptyTab message="Nenhum registro de evolução ainda — disponível em uma próxima etapa." />
-        </TabsContent>
+        {canSeeEvolution && (
+          <TabsContent value="evolution">
+            <PatientEvolutionTab patient={patient} />
+          </TabsContent>
+        )}
         <TabsContent value="documents">
           <EmptyTab message="Nenhum documento anexado ainda — disponível em uma próxima etapa." />
         </TabsContent>

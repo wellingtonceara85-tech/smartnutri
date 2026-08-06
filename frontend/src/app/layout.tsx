@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { AppQueryProvider } from '@/lib/query-provider';
+import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
@@ -16,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Clínica de Nutrição',
-  description: 'Sistema de gestão para clínica de nutrição',
+  title: 'SmartNutri',
+  description: 'Cadastro de pacientes, acompanhamento e evolução corporal para nutricionistas',
 };
 
 export default function RootLayout({
@@ -30,8 +31,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-muted/30">
         <AppQueryProvider>
           <AuthProvider>
-            {children}
-            <Toaster richColors position="top-right" />
+            <ThemeProvider>
+              {children}
+              <Toaster richColors position="top-right" />
+            </ThemeProvider>
           </AuthProvider>
         </AppQueryProvider>
       </body>

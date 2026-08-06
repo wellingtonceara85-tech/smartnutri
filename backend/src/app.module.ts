@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuditModule } from './common/audit/audit.module';
+import { StorageModule } from './common/storage/storage.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
@@ -13,6 +14,8 @@ import { UsersModule } from './modules/users/users.module';
 import { ClinicsModule } from './modules/clinics/clinics.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { PlansModule } from './modules/plans/plans.module';
+import { ProfessionalProfileModule } from './modules/professional-profile/professional-profile.module';
+import { EvolutionsModule } from './modules/evolutions/evolutions.module';
 
 @Module({
   imports: [
@@ -32,11 +35,14 @@ import { PlansModule } from './modules/plans/plans.module';
     }),
     PrismaModule,
     AuditModule,
+    StorageModule,
     AuthModule,
     UsersModule,
     ClinicsModule,
     PatientsModule,
     PlansModule,
+    ProfessionalProfileModule,
+    EvolutionsModule,
   ],
   controllers: [AppController],
   providers: [

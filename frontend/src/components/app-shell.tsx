@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
   CalendarDays,
   ClipboardList,
@@ -10,11 +11,12 @@ import {
   LogOut,
   Repeat,
   Settings,
+  UserCircle,
   Users,
   UsersRound,
   Wallet,
 } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { getProfessionalProfile } from '@/lib/api/professional-profile';
 import { useAuth, type UserRole } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 
@@ -42,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/relatorios', label: 'Relatórios', icon: ClipboardList },
   { href: '/planos', label: 'Planos', icon: ClipboardList },
   { href: '/usuarios', label: 'Usuários', icon: UsersRound, roles: ['ADMIN'] },
+  { href: '/perfil', label: 'Meu perfil', icon: UserCircle, roles: ['ADMIN', 'NUTRITIONIST'] },
   { href: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['ADMIN'] },
 ];
 
@@ -57,9 +61,16 @@ function initials(name: string) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, status, logout } = useAuth();
+  const { user, accessToken, status, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  const profileQuery = useQuery({
+    queryKey: ['professional-profile'],
+    queryFn: () => getProfessionalProfile(accessToken!),
+    enabled: status === 'authenticated' && !!accessToken,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -76,6 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const visibleItems = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user.role));
+  const displayName = profileQuery.data?.displayName || user.name;
 
   async function handleLogout() {
     await logout();
@@ -86,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-1">
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-background md:flex">
         <div className="flex h-16 items-center border-b px-6">
-          <span className="truncate font-semibold">{user.tenantName}</span>
+          <span className="truncate font-semibold text-primary">SmartNutri</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {visibleItems.map((item) => {
@@ -111,18 +123,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col">
         <header className="flex h-16 items-center justify-between border-b bg-background px-4 md:px-6">
-          <span className="font-semibold md:hidden">{user.tenantName}</span>
+          <span className="font-semibold text-primary md:hidden">SmartNutri</span>
           <div className="ml-auto flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none">
+                <span className="hidden text-sm font-medium sm:inline">{displayName}</span>
                 <Avatar className="size-8">
-                  <AvatarFallback>{initials(user.name)}</AvatarFallback>
+                  <AvatarImage src={profileQuery.data?.profilePhotoUrl ?? undefined} alt={displayName} />
+                  <AvatarFallback>{initials(displayName)}</AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
-                    <span className="font-medium">{user.name}</span>
+                    <span className="font-medium">{displayName}</span>
                     <span className="text-xs font-normal text-muted-foreground">{ROLE_LABELS[user.role]}</span>
                   </div>
                 </DropdownMenuLabel>

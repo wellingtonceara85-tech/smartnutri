@@ -37,6 +37,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://clinica:clinica_dev_password@postgres:5432/clinica_nutricao?schema=public
       NODE_ENV: development
@@ -47,6 +49,12 @@ services:
       JWT_REFRESH_EXPIRES_IN: 30d
       CORS_ORIGIN: http://localhost:3020
       COOKIE_SECURE: "false"
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:9020
+      STORAGE_REGION: us-east-1
+      STORAGE_ACCESS_KEY_ID: clinica_minio
+      STORAGE_SECRET_ACCESS_KEY: clinica_minio_password
+      STORAGE_BUCKET: clinica-nutricao-uploads
     ports:
       - "3021:3001"
     volumes:

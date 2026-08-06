@@ -36,18 +36,25 @@ model Tenant {
   updatedAt                  DateTime  @updatedAt
   deletedAt                  DateTime?
 
-  userClinics       UserClinic[]
-  patients          Patient[]
-  plans             Plan[]
-  appointmentTypes  AppointmentType[]
-  paymentMethods    PaymentMethod[]
-  treatmentCycles   TreatmentCycle[]
-  appointments      Appointment[]
-  charges           Charge[]
-  payments          Payment[]
-  patientEvolutions PatientEvolution[]
-  documents         Document[]
-  auditLogs         AuditLog[]
+  userClinics                    UserClinic[]
+  patients                       Patient[]
+  plans                          Plan[]
+  appointmentTypes               AppointmentType[]
+  paymentMethods                 PaymentMethod[]
+  treatmentCycles                TreatmentCycle[]
+  appointments                   Appointment[]
+  charges                        Charge[]
+  payments                       Payment[]
+  patientEvolutions              PatientEvolution[]
+  documents                      Document[]
+  auditLogs                      AuditLog[]
+  professionalProfile            ProfessionalProfile?
+  anthropometricMeasurements     AnthropometricMeasurement[]
+  bioimpedanceMeasurements       BioimpedanceMeasurement[]
+  segmentalBodyMeasurements      SegmentalBodyMeasurement[]
+  segmentalImpedanceMeasurements SegmentalImpedanceMeasurement[]
+  measurementReferenceRanges     MeasurementReferenceRange[]
+  evolutionPhotos                EvolutionPhoto[]
 }
 
 enum Role {
@@ -68,17 +75,60 @@ model User {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  userClinics           UserClinic[]
-  refreshTokens         RefreshToken[]
-  createdCycles         TreatmentCycle[]           @relation("CycleCreatedBy")
-  appointmentsAsNutri   Appointment[]              @relation("AppointmentNutritionist")
-  statusChanges         AppointmentStatusHistory[]
-  createdPayments       Payment[]                  @relation("PaymentCreatedBy")
-  createdRefunds        Refund[]                   @relation("RefundCreatedBy")
-  createdEvolutions     PatientEvolution[]         @relation("EvolutionCreatedBy")
-  uploadedDocuments     Document[]                 @relation("DocumentUploadedBy")
-  auditLogEntries       AuditLog[]
-  patientsAsResponsible Patient[]                  @relation("PatientResponsibleNutritionist")
+  userClinics             UserClinic[]
+  refreshTokens           RefreshToken[]
+  createdCycles           TreatmentCycle[]           @relation("CycleCreatedBy")
+  appointmentsAsNutri     Appointment[]              @relation("AppointmentNutritionist")
+  statusChanges           AppointmentStatusHistory[]
+  createdPayments         Payment[]                  @relation("PaymentCreatedBy")
+  createdRefunds          Refund[]                   @relation("RefundCreatedBy")
+  createdEvolutions       PatientEvolution[]         @relation("EvolutionCreatedBy")
+  updatedEvolutions       PatientEvolution[]         @relation("EvolutionUpdatedBy")
+  nutritionistEvolutions  PatientEvolution[]         @relation("EvolutionNutritionist")
+  sharedEvolutions        PatientEvolution[]         @relation("EvolutionSharedBy")
+  uploadedDocuments       Document[]                 @relation("DocumentUploadedBy")
+  uploadedEvolutionPhotos EvolutionPhoto[]           @relation("EvolutionPhotoUploadedBy")
+  auditLogEntries         AuditLog[]
+  patientsAsResponsible   Patient[]                  @relation("PatientResponsibleNutritionist")
+  professionalProfiles    ProfessionalProfile[]
+}
+
+/**
+ * Identidade do profissional exibida na interface — SmartNutri é a
+ * plataforma; nome, foto, CRN e cores aqui pertencem ao profissional, não
+ * a uma clínica fictícia. 1:1 por tenant (um profissional principal por
+ * ambiente nesta etapa); userId aponta para quem é "dono" da identidade.
+ */
+model ProfessionalProfile {
+  id                String   @id @default(uuid())
+  tenantId          String   @unique
+  userId            String?
+  displayName       String
+  professionalName  String
+  professionalTitle String?
+  crnNumber         String?
+  crnState          String?
+  specialty         String?
+  shortBio          String?
+  profilePhotoKey   String?
+  logoKey           String?
+  primaryPhone      String?
+  whatsappPhone     String?
+  email             String?
+  instagram         String?
+  website           String?
+  companyName       String?
+  legalName         String?
+  documentNumber    String?
+  addressLine       String?
+  paletteKey        String?  @default("sage")
+  primaryColor      String   @default("#3F7658")
+  secondaryColor    String   @default("#8CAF9A")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
 }
 
 model UserClinic {
@@ -148,14 +198,27 @@ enum PatientStatus {
   ARCHIVED
 }
 
+/**
+ * Preferência de silhueta para o mapa corporal (BodySegmentMap) — nunca
+ * inferida automaticamente a partir de identidade de gênero; o profissional
+ * escolhe manualmente, com sugestão inicial a partir de `gender`.
+ */
+enum SilhouettePreference {
+  MALE
+  FEMALE
+  NEUTRAL
+  NOT_INFORMED
+}
+
 model Patient {
-  id                        String        @id @default(uuid())
+  id                        String               @id @default(uuid())
   tenantId                  String
   fullName                  String
   socialName                String?
   cpf                       String?
   birthDate                 DateTime?
   gender                    Gender?
+  bodySilhouettePreference  SilhouettePreference @default(NOT_INFORMED)
   occupation                String?
   email                     String?
   primaryPhone              String?
@@ -173,9 +236,9 @@ model Patient {
   administrativeNotes       String?
   source                    String?
   responsibleNutritionistId String?
-  status                    PatientStatus @default(ACTIVE)
-  createdAt                 DateTime      @default(now())
-  updatedAt                 DateTime      @updatedAt
+  status                    PatientStatus        @default(ACTIVE)
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
   deletedAt                 DateTime?
 
   tenant                  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -482,33 +545,273 @@ model Refund {
 // Clínico / Auditoria
 // ==========================================================================
 
+enum EvolutionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/**
+ * Snapshot independente do paciente em uma data — nunca sobrescrito por
+ * avaliações futuras. Os dados de medição ficam em tabelas filhas
+ * (antropometria, bioimpedância, segmentar, fotos) para não virar uma
+ * única tabela gigante. `clinicalNotes`/`internalNotes` nunca são visíveis
+ * ao paciente; `patientVisibleNotes` é o único campo preparado para o
+ * futuro Portal do Paciente.
+ */
 model PatientEvolution {
-  id                   String    @id @default(uuid())
-  tenantId             String
-  patientId            String
-  appointmentId        String?
-  measuredAt           DateTime
-  weightKg             Decimal?  @db.Decimal(6, 2)
-  heightCm             Decimal?  @db.Decimal(5, 2)
-  bmi                  Decimal?  @db.Decimal(5, 2)
-  waistCircumferenceCm Decimal?  @db.Decimal(5, 2)
-  hipCircumferenceCm   Decimal?  @db.Decimal(5, 2)
-  armCircumferenceCm   Decimal?  @db.Decimal(5, 2)
-  bodyFatPercent       Decimal?  @db.Decimal(4, 1)
-  muscleMassKg         Decimal?  @db.Decimal(6, 2)
-  goal                 String?
-  notes                String?
-  createdByUserId      String
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  deletedAt            DateTime?
+  id                  String          @id @default(uuid())
+  tenantId            String
+  patientId           String
+  nutritionistUserId  String
+  appointmentId       String?
+  assessmentDate      DateTime        @db.Date
+  assessmentTime      String?
+  title               String?
+  objective           String?
+  clinicalNotes       String?
+  internalNotes       String?
+  patientVisibleNotes String?
+  isSharedWithPatient Boolean         @default(false)
+  sharedAt            DateTime?
+  sharedByUserId      String?
+  status              EvolutionStatus @default(ACTIVE)
+  createdByUserId     String
+  updatedByUserId     String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  deletedAt           DateTime?
 
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
-  createdByUser User         @relation("EvolutionCreatedBy", fields: [createdByUserId], references: [id])
+  tenant                Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient               Patient                     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment           Appointment?                @relation(fields: [appointmentId], references: [id])
+  nutritionistUser      User                        @relation("EvolutionNutritionist", fields: [nutritionistUserId], references: [id])
+  createdByUser         User                        @relation("EvolutionCreatedBy", fields: [createdByUserId], references: [id])
+  updatedByUser         User?                       @relation("EvolutionUpdatedBy", fields: [updatedByUserId], references: [id])
+  sharedByUser          User?                       @relation("EvolutionSharedBy", fields: [sharedByUserId], references: [id])
+  anthropometry         AnthropometricMeasurement?
+  bioimpedance          BioimpedanceMeasurement?
+  segmentalMeasurements SegmentalBodyMeasurement[]
+  referenceRanges       MeasurementReferenceRange[]
+  photos                EvolutionPhoto[]
 
-  @@index([tenantId, patientId, measuredAt])
+  @@index([tenantId, patientId, assessmentDate])
+  @@index([tenantId, status])
+}
+
+/// Todas as medidas são opcionais — o profissional preenche só o que tiver.
+model AnthropometricMeasurement {
+  id                String   @id @default(uuid())
+  tenantId          String
+  evolutionId       String   @unique
+  weightKg          Decimal? @db.Decimal(6, 2)
+  heightCm          Decimal? @db.Decimal(5, 2)
+  bmi               Decimal? @db.Decimal(5, 2)
+  bmiClassification String?
+  desiredWeightKg   Decimal? @db.Decimal(6, 2)
+
+  neckCm         Decimal? @db.Decimal(5, 2)
+  shoulderCm     Decimal? @db.Decimal(5, 2)
+  chestCm        Decimal? @db.Decimal(5, 2)
+  waistCm        Decimal? @db.Decimal(5, 2)
+  abdomenCm      Decimal? @db.Decimal(5, 2)
+  hipCm          Decimal? @db.Decimal(5, 2)
+  gluteCm        Decimal? @db.Decimal(5, 2)
+  rightArmCm     Decimal? @db.Decimal(5, 2)
+  leftArmCm      Decimal? @db.Decimal(5, 2)
+  rightForearmCm Decimal? @db.Decimal(5, 2)
+  leftForearmCm  Decimal? @db.Decimal(5, 2)
+  rightThighCm   Decimal? @db.Decimal(5, 2)
+  leftThighCm    Decimal? @db.Decimal(5, 2)
+  rightCalfCm    Decimal? @db.Decimal(5, 2)
+  leftCalfCm     Decimal? @db.Decimal(5, 2)
+
+  tricepsSkinfoldMm     Decimal? @db.Decimal(5, 2)
+  bicepsSkinfoldMm      Decimal? @db.Decimal(5, 2)
+  subscapularSkinfoldMm Decimal? @db.Decimal(5, 2)
+  suprailiacSkinfoldMm  Decimal? @db.Decimal(5, 2)
+  abdominalSkinfoldMm   Decimal? @db.Decimal(5, 2)
+  chestSkinfoldMm       Decimal? @db.Decimal(5, 2)
+  midaxillarySkinfoldMm Decimal? @db.Decimal(5, 2)
+  thighSkinfoldMm       Decimal? @db.Decimal(5, 2)
+  calfSkinfoldMm        Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  evolution PatientEvolution @relation(fields: [evolutionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+/// Dados de bioimpedância — variam por equipamento, todos opcionais.
+model BioimpedanceMeasurement {
+  id                     String   @id @default(uuid())
+  tenantId               String
+  evolutionId            String   @unique
+  bodyFatPercent         Decimal? @db.Decimal(4, 1)
+  fatMassKg              Decimal? @db.Decimal(6, 2)
+  leanMassKg             Decimal? @db.Decimal(6, 2)
+  muscleMassKg           Decimal? @db.Decimal(6, 2)
+  skeletalMuscleMassKg   Decimal? @db.Decimal(6, 2)
+  musclePercent          Decimal? @db.Decimal(4, 1)
+  bodyWaterLiters        Decimal? @db.Decimal(5, 2)
+  bodyWaterPercent       Decimal? @db.Decimal(4, 1)
+  proteinKg              Decimal? @db.Decimal(5, 2)
+  proteinPercent         Decimal? @db.Decimal(4, 1)
+  mineralMassKg          Decimal? @db.Decimal(5, 2)
+  boneMassKg             Decimal? @db.Decimal(5, 2)
+  visceralFatLevel       Decimal? @db.Decimal(4, 1)
+  basalMetabolicRateKcal Int?
+  metabolicAge           Int?
+  waistHipRatio          Decimal? @db.Decimal(4, 2)
+  obesityDegreePercent   Decimal? @db.Decimal(5, 1)
+  bodyType               String?
+  impedanceOhms          Decimal? @db.Decimal(7, 2)
+  deviceManufacturer     String?
+  notes                  String?
+
+  /// Pontuação geral fornecida pelo equipamento — nunca calculada pelo SmartNutri, nome sempre genérico.
+  bodyCompositionScore        Int?
+  bodyCompositionScoreMaximum Int?
+  bodyCompositionScoreLabel   String?
+  bodyCompositionScoreSource  String?
+
+  /// Metas/ajustes fornecidos pelo equipamento ou definidos pela nutricionista — valores podem ser negativos, positivos ou zero, sem interpretação automática.
+  referenceWeightKg         Decimal? @db.Decimal(6, 2)
+  recommendedWeightChangeKg Decimal? @db.Decimal(6, 2)
+  recommendedFatChangeKg    Decimal? @db.Decimal(6, 2)
+  recommendedMuscleChangeKg Decimal? @db.Decimal(6, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant                         Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  evolution                      PatientEvolution                @relation(fields: [evolutionId], references: [id], onDelete: Cascade)
+  segmentalImpedanceMeasurements SegmentalImpedanceMeasurement[]
+
+  @@index([tenantId])
+}
+
+/**
+ * Impedância por frequência e segmento — estrutura flexível (não colunas
+ * fixas para 20kHz/100kHz) para aceitar equipamentos com uma, duas ou
+ * múltiplas frequências.
+ */
+model SegmentalImpedanceMeasurement {
+  id                        String   @id @default(uuid())
+  tenantId                  String
+  bioimpedanceMeasurementId String
+  frequencyValue            Decimal  @db.Decimal(7, 2)
+  frequencyUnit             String   @default("kHz")
+  rightArmOhms              Decimal? @db.Decimal(7, 2)
+  leftArmOhms               Decimal? @db.Decimal(7, 2)
+  trunkOhms                 Decimal? @db.Decimal(7, 2)
+  rightLegOhms              Decimal? @db.Decimal(7, 2)
+  leftLegOhms               Decimal? @db.Decimal(7, 2)
+  impedanceUnit             String   @default("ohm")
+  deviceManufacturer        String?
+  notes                     String?
+  createdAt                 DateTime @default(now())
+
+  tenant                  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bioimpedanceMeasurement BioimpedanceMeasurement @relation(fields: [bioimpedanceMeasurementId], references: [id], onDelete: Cascade)
+
+  @@unique([bioimpedanceMeasurementId, frequencyValue])
+  @@index([tenantId])
+}
+
+/**
+ * Faixa de referência opcional para qualquer campo da avaliação — genérica
+ * por `fieldKey` (não uma coluna min/max por campo) porque cada equipamento
+ * ou nutricionista pode fornecer referências diferentes. O SmartNutri nunca
+ * diagnostica a partir daqui, só exibe o valor informado.
+ */
+model MeasurementReferenceRange {
+  id          String   @id @default(uuid())
+  tenantId    String
+  evolutionId String
+  fieldKey    String
+  minValue    Decimal? @db.Decimal(8, 2)
+  maxValue    Decimal? @db.Decimal(8, 2)
+  unit        String?
+  source      String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  evolution PatientEvolution @relation(fields: [evolutionId], references: [id], onDelete: Cascade)
+
+  @@unique([evolutionId, fieldKey])
+  @@index([tenantId])
+}
+
+enum BodySegment {
+  RIGHT_ARM
+  LEFT_ARM
+  TRUNK
+  RIGHT_LEG
+  LEFT_LEG
+}
+
+enum SegmentalMetricType {
+  FAT_MASS_KG
+  LEAN_MASS_KG
+}
+
+/**
+ * Modelado como linha por segmento+métrica (não colunas fixas) para
+ * aceitar novas métricas segmentares no futuro sem alterar a estrutura.
+ */
+model SegmentalBodyMeasurement {
+  id             String              @id @default(uuid())
+  tenantId       String
+  evolutionId    String
+  segment        BodySegment
+  metricType     SegmentalMetricType
+  valueKg        Decimal             @db.Decimal(5, 2)
+  /// Marca quando o próprio equipamento indica que o valor é estimado (comum em gordura segmentar).
+  isEstimated    Boolean             @default(false)
+  referenceMinKg Decimal?            @db.Decimal(5, 2)
+  referenceMaxKg Decimal?            @db.Decimal(5, 2)
+  createdAt      DateTime            @default(now())
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  evolution PatientEvolution @relation(fields: [evolutionId], references: [id], onDelete: Cascade)
+
+  @@unique([evolutionId, segment, metricType])
+  @@index([tenantId])
+}
+
+enum EvolutionPhotoType {
+  FRONT
+  BACK
+  RIGHT_PROFILE
+  LEFT_PROFILE
+  OTHER
+}
+
+/// Fotos são dados sensíveis — nunca públicas; storageKey resolvido via URL pré-assinada de curta duração.
+model EvolutionPhoto {
+  id               String             @id @default(uuid())
+  tenantId         String
+  evolutionId      String
+  type             EvolutionPhotoType
+  storageKey       String
+  mimeType         String
+  sizeBytes        Int
+  consentGranted   Boolean            @default(false)
+  consentDate      DateTime?
+  consentNotes     String?
+  uploadedByUserId String
+  createdAt        DateTime           @default(now())
+  deletedAt        DateTime?
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  evolution      PatientEvolution @relation(fields: [evolutionId], references: [id], onDelete: Cascade)
+  uploadedByUser User             @relation("EvolutionPhotoUploadedBy", fields: [uploadedByUserId], references: [id])
+
+  @@index([tenantId, evolutionId])
 }
 
 model Document {

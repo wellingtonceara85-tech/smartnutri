@@ -1,16 +1,38 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { getProfessionalProfile } from '@/lib/api/professional-profile';
 import { useAuth } from '@/lib/auth-context';
 
+function timeBasedGreeting(hour: number): string {
+  if (hour < 5) return 'Boa noite';
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
+
+  const profileQuery = useQuery({
+    queryKey: ['professional-profile'],
+    queryFn: () => getProfessionalProfile(accessToken!),
+    enabled: !!accessToken,
+    staleTime: 60_000,
+  });
+
+  const displayName = profileQuery.data?.displayName || user?.name || '';
+  const firstName = displayName.split(' ')[0];
+  const greeting = timeBasedGreeting(new Date().getHours());
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Olá, {user?.name.split(' ')[0]}</h1>
-        <p className="text-muted-foreground">Painel de {user?.tenantName}</p>
+        <h1 className="text-2xl font-semibold">
+          {greeting}, {firstName}
+        </h1>
+        <p className="text-muted-foreground">Este é o seu painel no SmartNutri</p>
       </div>
 
       <Card>
