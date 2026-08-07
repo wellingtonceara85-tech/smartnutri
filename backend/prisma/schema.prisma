@@ -79,6 +79,8 @@ model User {
   refreshTokens           RefreshToken[]
   createdCycles           TreatmentCycle[]           @relation("CycleCreatedBy")
   appointmentsAsNutri     Appointment[]              @relation("AppointmentNutritionist")
+  createdAppointments     Appointment[]              @relation("AppointmentCreatedBy")
+  updatedAppointments     Appointment[]              @relation("AppointmentUpdatedBy")
   statusChanges           AppointmentStatusHistory[]
   createdPayments         Payment[]                  @relation("PaymentCreatedBy")
   createdRefunds          Refund[]                   @relation("RefundCreatedBy")
@@ -385,34 +387,52 @@ enum AppointmentModality {
   HOME_VISIT
 }
 
+/**
+ * `treatmentCycleId`/`sequenceNumber` são opcionais: a Missão 0004 introduz
+ * agendamento avulso (paciente → consulta direta, sem passar por um Plan
+ * contratado) — o encadeamento com TreatmentCycle continua disponível para
+ * quando o módulo financeiro (Etapa 5 original) for implementado, mas deixa
+ * de ser pré-requisito para simplesmente marcar uma consulta.
+ */
 model Appointment {
   id                           String              @id @default(uuid())
   tenantId                     String
-  treatmentCycleId             String
+  treatmentCycleId             String?
   patientId                    String
   nutritionistUserId           String
   appointmentTypeId            String
   scheduledAt                  DateTime
   durationMinutes              Int
-  sequenceNumber               Int
+  sequenceNumber               Int?
   status                       AppointmentStatus   @default(SCHEDULED)
   modality                     AppointmentModality @default(IN_PERSON)
   location                     String?
+  onlineMeetingUrl             String?
   adminNotes                   String?
   clinicalNotes                String?
+  patientVisibleNotes          String?
+  confirmedAt                  DateTime?
+  confirmationNotes            String?
   cancellationReason           String?
+  cancelledAt                  DateTime?
+  completedAt                  DateTime?
+  noShowAt                     DateTime?
   rescheduledFromAppointmentId String?             @unique
+  createdByUserId              String
+  updatedByUserId              String?
   createdAt                    DateTime            @default(now())
   updatedAt                    DateTime            @updatedAt
   deletedAt                    DateTime?
 
   tenant                     Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  treatmentCycle             TreatmentCycle             @relation(fields: [treatmentCycleId], references: [id], onDelete: Cascade)
+  treatmentCycle             TreatmentCycle?            @relation(fields: [treatmentCycleId], references: [id], onDelete: Cascade)
   patient                    Patient                    @relation(fields: [patientId], references: [id], onDelete: Cascade)
   nutritionistUser           User                       @relation("AppointmentNutritionist", fields: [nutritionistUserId], references: [id])
   appointmentType            AppointmentType            @relation(fields: [appointmentTypeId], references: [id])
   rescheduledFromAppointment Appointment?               @relation("AppointmentReschedule", fields: [rescheduledFromAppointmentId], references: [id])
   rescheduledIntoAppointment Appointment?               @relation("AppointmentReschedule")
+  createdByUser              User                       @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id])
+  updatedByUser              User?                      @relation("AppointmentUpdatedBy", fields: [updatedByUserId], references: [id])
   statusHistory              AppointmentStatusHistory[]
   charges                    Charge[]
   patientEvolutions          PatientEvolution[]

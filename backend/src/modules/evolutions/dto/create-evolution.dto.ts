@@ -63,6 +63,15 @@ export class CreateEvolutionDto {
   @IsUUID()
   nutritionistUserId?: string;
 
+  @ApiProperty({
+    required: false,
+    description:
+      'Consulta (Appointment) em que esta avaliação foi registrada, se houver.',
+  })
+  @IsOptional()
+  @IsUUID()
+  appointmentId?: string;
+
   @ApiProperty({ required: false, type: AnthropometricDto })
   @IsOptional()
   @ValidateNested()

@@ -95,10 +95,14 @@ const EMPTY_REFERENCE_ROW: ReferenceRow = {
   note: '',
 };
 
-function toFormValues(evolution?: PatientEvolution): Partial<FormShape> {
+function toFormValues(
+  evolution?: PatientEvolution,
+  defaults?: { assessmentDate?: string; nutritionistUserId?: string },
+): Partial<FormShape> {
   if (!evolution) {
     return {
-      assessmentDate: new Date().toISOString().slice(0, 10),
+      assessmentDate: defaults?.assessmentDate ?? new Date().toISOString().slice(0, 10),
+      nutritionistUserId: defaults?.nutritionistUserId,
       anthropometry: {},
       bioimpedance: {},
       segmental: {},
@@ -211,9 +215,20 @@ interface EvolutionFormProps {
   mode: 'create' | 'edit';
   patientId: string;
   evolution?: PatientEvolution;
+  /** Vindo do fluxo "Finalizar atendimento" — associa a avaliação à consulta de origem. */
+  appointmentId?: string;
+  defaultAssessmentDate?: string;
+  defaultNutritionistUserId?: string;
 }
 
-export function EvolutionForm({ mode, patientId, evolution }: EvolutionFormProps) {
+export function EvolutionForm({
+  mode,
+  patientId,
+  evolution,
+  appointmentId,
+  defaultAssessmentDate,
+  defaultNutritionistUserId,
+}: EvolutionFormProps) {
   const { accessToken, user } = useAuth();
   const router = useRouter();
 
@@ -228,7 +243,12 @@ export function EvolutionForm({ mode, patientId, evolution }: EvolutionFormProps
     control,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormShape>({ defaultValues: toFormValues(evolution) });
+  } = useForm<FormShape>({
+    defaultValues: toFormValues(evolution, {
+      assessmentDate: defaultAssessmentDate,
+      nutritionistUserId: defaultNutritionistUserId,
+    }),
+  });
 
   const impedanceFieldArray = useFieldArray({ control, name: 'impedanceRows' });
   const referenceFieldArray = useFieldArray({ control, name: 'referenceRows' });
@@ -317,6 +337,7 @@ export function EvolutionForm({ mode, patientId, evolution }: EvolutionFormProps
       clinicalNotes: values.clinicalNotes || undefined,
       internalNotes: values.internalNotes || undefined,
       nutritionistUserId: values.nutritionistUserId || undefined,
+      appointmentId: mode === 'create' ? appointmentId : undefined,
       anthropometry: Object.keys(anthropometry).length > 0 ? anthropometry : undefined,
       bioimpedance: hasBioimpedanceData
         ? {

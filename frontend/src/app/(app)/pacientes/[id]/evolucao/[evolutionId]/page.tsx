@@ -29,6 +29,7 @@ import {
   SKINFOLD_FIELDS,
 } from '@/lib/evolution-form-fields';
 import { compareSegmentalMeasurements } from '@/lib/evolution-metrics';
+import { formatAppointmentDateTime } from '@/lib/appointment-datetime';
 import { formatCalendarDate } from '@/lib/masks';
 import { EVOLUTION_PHOTO_TYPE_LABELS, type EvolutionPhotoTypeEnum } from '@/lib/types';
 
@@ -154,6 +155,12 @@ export default function EvolucaoDetailPage({ params }: { params: Promise<{ id: s
             {evolution.title && <span className="text-muted-foreground"> — {evolution.title}</span>}
           </h1>
           <p className="text-muted-foreground">Responsável: {evolution.nutritionistUser.name}</p>
+          {evolution.appointment && (
+            <p className="text-sm text-muted-foreground">
+              Consulta relacionada: {evolution.appointment.appointmentType.name} —{' '}
+              {formatAppointmentDateTime(evolution.appointment.scheduledAt)}
+            </p>
+          )}
           {evolution.isSharedWithPatient && <Badge variant="secondary">Compartilhada com o paciente</Badge>}
         </div>
         <div className="flex flex-wrap gap-2">

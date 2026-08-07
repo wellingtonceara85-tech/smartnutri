@@ -9,11 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PatientAppointmentsTab } from '@/components/patient-appointments-tab';
 import { PatientEvolutionTab } from '@/components/patient-evolution-tab';
 import { PatientStatusBadge } from '@/components/patient-status-badge';
+import { listPatientAppointments } from '@/lib/api/appointments';
 import { getPatient } from '@/lib/api/patients';
 import { ApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
+import { formatAppointmentDateTime } from '@/lib/appointment-datetime';
 import { buildWhatsAppLink, formatAge, maskPhone } from '@/lib/masks';
 import { GENDER_LABELS } from '@/lib/types';
 
@@ -52,6 +55,12 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
     enabled: !!accessToken,
   });
 
+  const appointmentsQuery = useQuery({
+    queryKey: ['patient-appointments', id],
+    queryFn: () => listPatientAppointments(accessToken!, id),
+    enabled: !!accessToken,
+  });
+
   if (patientQuery.isLoading) {
     return (
       <div className="flex flex-col gap-4">
@@ -75,6 +84,15 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
   const patient = patientQuery.data;
   const age = formatAge(patient.birthDate);
   const whatsapp = patient.whatsappPhone ?? patient.primaryPhone;
+
+  const appointments = appointmentsQuery.data ?? [];
+  const nowIso = new Date().toISOString();
+  const nextAppointment = appointments
+    .filter((a) => a.scheduledAt >= nowIso && !['CANCELLED_BY_CLINIC', 'CANCELLED_BY_PATIENT', 'RESCHEDULED'].includes(a.status))
+    .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))[0];
+  const lastCompletedAppointment = appointments
+    .filter((a) => a.status === 'DONE')
+    .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))[0];
 
   return (
     <div className="flex flex-col gap-6">
@@ -147,7 +165,16 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Próxima consulta</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">Não disponível</CardContent>
+              <CardContent className="text-sm text-muted-foreground">
+                {nextAppointment ? (
+                  <>
+                    <p className="text-foreground">{formatAppointmentDateTime(nextAppointment.scheduledAt)}</p>
+                    <p>{nextAppointment.appointmentType.name}</p>
+                  </>
+                ) : (
+                  'Não disponível'
+                )}
+              </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
@@ -159,7 +186,16 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Último atendimento</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">Não disponível</CardContent>
+              <CardContent className="text-sm text-muted-foreground">
+                {lastCompletedAppointment ? (
+                  <>
+                    <p className="text-foreground">{formatAppointmentDateTime(lastCompletedAppointment.scheduledAt)}</p>
+                    <p>{lastCompletedAppointment.appointmentType.name}</p>
+                  </>
+                ) : (
+                  'Não disponível'
+                )}
+              </CardContent>
             </Card>
           </div>
 
@@ -197,7 +233,7 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
           <EmptyTab message="Nenhum ciclo de acompanhamento cadastrado ainda — disponível em uma próxima etapa." />
         </TabsContent>
         <TabsContent value="appointments">
-          <EmptyTab message="Nenhuma consulta registrada ainda — disponível em uma próxima etapa." />
+          <PatientAppointmentsTab patientId={patient.id} />
         </TabsContent>
         <TabsContent value="financial">
           <EmptyTab message="Nenhuma movimentação financeira registrada ainda — disponível em uma próxima etapa." />

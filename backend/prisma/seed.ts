@@ -2,6 +2,8 @@ import 'dotenv/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
+  AppointmentModality,
+  AppointmentStatus,
   Gender,
   PatientStatus,
   PrismaClient,
@@ -422,6 +424,280 @@ async function main() {
               }
             : undefined,
       },
+    });
+  }
+
+  // ------------------------------------------------------------------------
+  // Consultas fictícias (Missão 0004) — cobrem os principais status/cenários
+  // exigidos: passadas/hoje/futuras, confirmada/aguardando/realizada/
+  // cancelada/falta/reagendada, online/presencial, e um vínculo consulta→
+  // evolução. Idempotente por contagem: só roda na primeira execução do seed.
+  const existingAppointmentsCount = await prisma.appointment.count({
+    where: { tenantId: tenant.id },
+  });
+
+  if (existingAppointmentsCount === 0) {
+    const typeIdByName = new Map<string, string>();
+    for (const type of appointmentTypes) {
+      const record = await prisma.appointmentType.findFirstOrThrow({
+        where: { tenantId: tenant.id, name: type.name },
+      });
+      typeIdByName.set(type.name, record.id);
+    }
+
+    const carlosId = patientIdByName.get('Carlos Eduardo Souza')!;
+    const danielaId = patientIdByName.get('Daniela Ferreira Lima')!;
+    const eduardoId = patientIdByName.get('Eduardo Costa Pereira')!;
+    const fernandaId = patientIdByName.get('Fernanda Oliveira Rocha')!;
+
+    const atHour = (daysOffset: number, hour: number, minute = 0): Date => {
+      const date = new Date();
+      date.setDate(date.getDate() + daysOffset);
+      date.setHours(hour, minute, 0, 0);
+      return date;
+    };
+
+    interface AppointmentFixture {
+      patientId: string;
+      typeName: string;
+      scheduledAt: Date;
+      durationMinutes: number;
+      modality: AppointmentModality;
+      status: AppointmentStatus;
+      location?: string;
+      onlineMeetingUrl?: string;
+      confirmedAt?: Date;
+      completedAt?: Date;
+      cancelledAt?: Date;
+      cancellationReason?: string;
+      noShowAt?: Date;
+      clinicalNotes?: string;
+      linkToLatestBeatrizEvolution?: boolean;
+    }
+
+    const fixtures: AppointmentFixture[] = [
+      // Hoje
+      {
+        patientId: beatrizId,
+        typeName: 'Retorno',
+        scheduledAt: atHour(0, 14, 0),
+        durationMinutes: 40,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.CONFIRMED,
+        confirmedAt: new Date(),
+      },
+      {
+        patientId: carlosId,
+        typeName: 'Primeira consulta',
+        scheduledAt: atHour(0, 16, 0),
+        durationMinutes: 60,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.AWAITING_CONFIRMATION,
+      },
+      // Futuras
+      {
+        patientId: danielaId,
+        typeName: 'Acompanhamento',
+        scheduledAt: atHour(2, 10, 0),
+        durationMinutes: 30,
+        modality: AppointmentModality.ONLINE,
+        onlineMeetingUrl: 'https://meet.exemplo.com/daniela-acompanhamento',
+        status: AppointmentStatus.AWAITING_CONFIRMATION,
+      },
+      {
+        patientId: eduardoId,
+        typeName: 'Avaliação',
+        scheduledAt: atHour(5, 11, 0),
+        durationMinutes: 60,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.CONFIRMED,
+        confirmedAt: new Date(),
+      },
+      {
+        patientId: fernandaId,
+        typeName: 'Encaixe',
+        scheduledAt: atHour(7, 9, 0),
+        durationMinutes: 20,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.AWAITING_CONFIRMATION,
+      },
+      // Passadas
+      {
+        patientId: beatrizId,
+        typeName: 'Retorno',
+        scheduledAt: atHour(-5, 9, 0),
+        durationMinutes: 40,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.DONE,
+        completedAt: atHour(-5, 9, 45),
+        clinicalNotes:
+          'Boa adesão ao plano alimentar. Redução consistente de peso e gordura corporal.',
+        linkToLatestBeatrizEvolution: true,
+      },
+      {
+        patientId: carlosId,
+        typeName: 'Acompanhamento',
+        scheduledAt: atHour(-10, 15, 0),
+        durationMinutes: 30,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.DONE,
+        completedAt: atHour(-10, 15, 30),
+        clinicalNotes: 'Paciente relatou dificuldade com refeições fora de casa.',
+      },
+      {
+        patientId: danielaId,
+        typeName: 'Retorno',
+        scheduledAt: atHour(-15, 10, 0),
+        durationMinutes: 40,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.CANCELLED_BY_PATIENT,
+        cancelledAt: atHour(-16, 8, 0),
+        cancellationReason: 'Paciente remarcou por motivo pessoal',
+      },
+      {
+        patientId: eduardoId,
+        typeName: 'Avaliação',
+        scheduledAt: atHour(-8, 14, 0),
+        durationMinutes: 60,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.NO_SHOW,
+        noShowAt: atHour(-8, 14, 20),
+      },
+    ];
+
+    const typeDurationByName = new Map(
+      appointmentTypes.map((t) => [t.name, t.defaultDurationMinutes]),
+    );
+
+    for (const fixture of fixtures) {
+      const appointment = await prisma.appointment.create({
+        data: {
+          tenantId: tenant.id,
+          patientId: fixture.patientId,
+          nutritionistUserId,
+          appointmentTypeId: typeIdByName.get(fixture.typeName)!,
+          scheduledAt: fixture.scheduledAt,
+          durationMinutes: fixture.durationMinutes,
+          modality: fixture.modality,
+          location: fixture.location,
+          onlineMeetingUrl: fixture.onlineMeetingUrl,
+          status: fixture.status,
+          confirmedAt: fixture.confirmedAt,
+          completedAt: fixture.completedAt,
+          cancelledAt: fixture.cancelledAt,
+          cancellationReason: fixture.cancellationReason,
+          noShowAt: fixture.noShowAt,
+          clinicalNotes: fixture.clinicalNotes,
+          createdByUserId: nutritionistUserId,
+        },
+      });
+
+      await prisma.appointmentStatusHistory.create({
+        data: {
+          tenantId: tenant.id,
+          appointmentId: appointment.id,
+          fromStatus: null,
+          toStatus: fixture.status,
+          changedByUserId: nutritionistUserId,
+          reason: 'Consulta de demonstração (seed)',
+        },
+      });
+
+      if (fixture.linkToLatestBeatrizEvolution) {
+        const latestEvolution = await prisma.patientEvolution.findFirst({
+          where: { tenantId: tenant.id, patientId: beatrizId },
+          orderBy: { assessmentDate: 'desc' },
+        });
+        if (latestEvolution) {
+          await prisma.patientEvolution.update({
+            where: { id: latestEvolution.id },
+            data: { appointmentId: appointment.id },
+          });
+        }
+      }
+    }
+
+    // Reagendamento: consulta original de Fernanda (20 dias atrás) foi
+    // reagendada para 12 dias atrás — preserva a original como RESCHEDULED
+    // e cria a nova ligada por rescheduledFromAppointmentId.
+    const fernandaOriginal = await prisma.appointment.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: fernandaId,
+        nutritionistUserId,
+        appointmentTypeId: typeIdByName.get('Retorno')!,
+        scheduledAt: atHour(-20, 10, 0),
+        durationMinutes: typeDurationByName.get('Retorno')!,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.RESCHEDULED,
+        createdByUserId: nutritionistUserId,
+      },
+    });
+    await prisma.appointmentStatusHistory.createMany({
+      data: [
+        {
+          tenantId: tenant.id,
+          appointmentId: fernandaOriginal.id,
+          fromStatus: null,
+          toStatus: AppointmentStatus.SCHEDULED,
+          changedByUserId: nutritionistUserId,
+          reason: 'Consulta de demonstração (seed)',
+        },
+        {
+          tenantId: tenant.id,
+          appointmentId: fernandaOriginal.id,
+          fromStatus: AppointmentStatus.SCHEDULED,
+          toStatus: AppointmentStatus.RESCHEDULED,
+          changedByUserId: nutritionistUserId,
+          reason: 'Paciente pediu para adiar (seed)',
+        },
+      ],
+    });
+
+    const fernandaRescheduled = await prisma.appointment.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: fernandaId,
+        nutritionistUserId,
+        appointmentTypeId: typeIdByName.get('Retorno')!,
+        scheduledAt: atHour(-12, 10, 0),
+        durationMinutes: typeDurationByName.get('Retorno')!,
+        modality: AppointmentModality.IN_PERSON,
+        location: 'Consultório 1',
+        status: AppointmentStatus.DONE,
+        completedAt: atHour(-12, 10, 40),
+        rescheduledFromAppointmentId: fernandaOriginal.id,
+        createdByUserId: nutritionistUserId,
+      },
+    });
+    await prisma.appointmentStatusHistory.createMany({
+      data: [
+        {
+          tenantId: tenant.id,
+          appointmentId: fernandaRescheduled.id,
+          fromStatus: null,
+          toStatus: AppointmentStatus.SCHEDULED,
+          changedByUserId: nutritionistUserId,
+          reason: 'Reagendada (seed)',
+        },
+        {
+          tenantId: tenant.id,
+          appointmentId: fernandaRescheduled.id,
+          fromStatus: AppointmentStatus.SCHEDULED,
+          toStatus: AppointmentStatus.DONE,
+          changedByUserId: nutritionistUserId,
+          reason: 'Consulta de demonstração (seed)',
+        },
+      ],
     });
   }
 

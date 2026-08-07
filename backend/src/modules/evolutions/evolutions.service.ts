@@ -29,6 +29,13 @@ const EVOLUTION_INCLUDE = {
   photos: { where: { deletedAt: null } },
   nutritionistUser: { select: { id: true, name: true } },
   createdByUser: { select: { id: true, name: true } },
+  appointment: {
+    select: {
+      id: true,
+      scheduledAt: true,
+      appointmentType: { select: { name: true } },
+    },
+  },
 } satisfies Prisma.PatientEvolutionInclude;
 
 @Injectable()
@@ -72,6 +79,13 @@ export class EvolutionsService {
       actorRole,
       dto.nutritionistUserId,
     );
+    if (dto.appointmentId) {
+      await this.assertAppointmentBelongsToPatient(
+        tenantId,
+        dto.appointmentId,
+        patientId,
+      );
+    }
 
     const bmiFields = await this.computeBmiFields(
       patientId,
@@ -85,6 +99,7 @@ export class EvolutionsService {
         patientId,
         nutritionistUserId,
         createdByUserId: actorUserId,
+        appointmentId: dto.appointmentId,
         assessmentDate: new Date(dto.assessmentDate),
         assessmentTime: dto.assessmentTime,
         title: dto.title,
@@ -407,6 +422,21 @@ export class EvolutionsService {
       throw new NotFoundException('Paciente não encontrado');
     }
     return patient;
+  }
+
+  /** Evita vincular uma evolução a uma consulta de outro paciente ou de outro tenant. */
+  private async assertAppointmentBelongsToPatient(
+    tenantId: string,
+    appointmentId: string,
+    patientId: string,
+  ) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, tenantId, patientId, deletedAt: null },
+    });
+    if (!appointment) {
+      throw new NotFoundException('Consulta não encontrada para este paciente');
+    }
+    return appointment;
   }
 
   /** Sem nutritionistUserId explícito, só o próprio nutricionista pode se auto-atribuir. */

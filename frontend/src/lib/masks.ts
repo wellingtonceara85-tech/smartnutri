@@ -23,10 +23,11 @@ export function maskCep(value: string): string {
   return digits.replace(/(\d{5})(\d{1,3})$/, '$1-$2');
 }
 
-export function buildWhatsAppLink(phone: string): string {
+export function buildWhatsAppLink(phone: string, message?: string): string {
   const digits = onlyDigits(phone);
   const withCountryCode = digits.startsWith('55') ? digits : `55${digits}`;
-  return `https://wa.me/${withCountryCode}`;
+  const query = message ? `?text=${encodeURIComponent(message)}` : '';
+  return `https://wa.me/${withCountryCode}${query}`;
 }
 
 /**

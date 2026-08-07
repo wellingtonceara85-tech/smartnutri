@@ -97,6 +97,12 @@ describe('EvolutionsService (integração)', () => {
     await prisma.patientEvolution.deleteMany({
       where: { tenantId: { in: [tenantA.id, tenantB.id] } },
     });
+    await prisma.appointment.deleteMany({
+      where: { tenantId: { in: [tenantA.id, tenantB.id] } },
+    });
+    await prisma.appointmentType.deleteMany({
+      where: { tenantId: { in: [tenantA.id, tenantB.id] } },
+    });
     await prisma.patient.deleteMany({
       where: { id: { in: [patientA.id, patientB.id] } },
     });
@@ -112,13 +118,23 @@ describe('EvolutionsService (integração)', () => {
   });
 
   it('persiste a data da avaliação exatamente como informada, sem deslocamento de fuso', async () => {
-    const created = await service.create(tenantA.id, nutritionistA.id, Role.NUTRITIONIST, patientA.id, {
-      assessmentDate: '2026-08-06',
-    });
-    expect(created.assessmentDate.toISOString().slice(0, 10)).toBe('2026-08-06');
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      patientA.id,
+      {
+        assessmentDate: '2026-08-06',
+      },
+    );
+    expect(created.assessmentDate.toISOString().slice(0, 10)).toBe(
+      '2026-08-06',
+    );
 
     const fetched = await service.getById(tenantA.id, created.id);
-    expect(fetched.assessmentDate.toISOString().slice(0, 10)).toBe('2026-08-06');
+    expect(fetched.assessmentDate.toISOString().slice(0, 10)).toBe(
+      '2026-08-06',
+    );
 
     const [inHistory] = await service.list(tenantA.id, patientA.id);
     expect(inHistory.assessmentDate.toISOString().slice(0, 10)).not.toBeNull();
@@ -467,5 +483,137 @@ describe('EvolutionsService (integração)', () => {
     expect(created.referenceRanges).toHaveLength(1);
     expect(created.referenceRanges[0].fieldKey).toBe('bodyWaterLiters');
     expect(Number(created.referenceRanges[0].minValue)).toBeCloseTo(32.5, 1);
+  });
+
+  describe('vínculo com consulta (Appointment)', () => {
+    it('vincula a evolução à consulta informada quando pertence ao mesmo paciente', async () => {
+      const appointmentType = await prisma.appointmentType.create({
+        data: {
+          tenantId: tenantA.id,
+          name: `Retorno-${runId}`,
+          defaultDurationMinutes: 40,
+        },
+      });
+      const appointment = await prisma.appointment.create({
+        data: {
+          tenantId: tenantA.id,
+          patientId: patientA.id,
+          nutritionistUserId: nutritionistA.id,
+          appointmentTypeId: appointmentType.id,
+          scheduledAt: new Date('2026-08-10T14:00:00.000Z'),
+          durationMinutes: 40,
+          createdByUserId: nutritionistA.id,
+        },
+      });
+
+      const created = await service.create(
+        tenantA.id,
+        nutritionistA.id,
+        Role.NUTRITIONIST,
+        patientA.id,
+        {
+          assessmentDate: '2026-08-10',
+          appointmentId: appointment.id,
+        },
+      );
+
+      expect(created.appointment?.id).toBe(appointment.id);
+    });
+
+    it('bloqueia vínculo com consulta de outro paciente', async () => {
+      const appointmentType = await prisma.appointmentType.create({
+        data: {
+          tenantId: tenantA.id,
+          name: `Retorno-outro-paciente-${runId}`,
+          defaultDurationMinutes: 40,
+        },
+      });
+      const appointmentOfPatientB = await prisma.appointment.create({
+        data: {
+          tenantId: tenantA.id,
+          patientId: patientB.id,
+          nutritionistUserId: nutritionistA.id,
+          appointmentTypeId: appointmentType.id,
+          scheduledAt: new Date('2026-08-11T14:00:00.000Z'),
+          durationMinutes: 40,
+          createdByUserId: nutritionistA.id,
+        },
+      });
+
+      await expect(
+        service.create(
+          tenantA.id,
+          nutritionistA.id,
+          Role.NUTRITIONIST,
+          patientA.id,
+          {
+            assessmentDate: '2026-08-11',
+            appointmentId: appointmentOfPatientB.id,
+          },
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('bloqueia vínculo com consulta de outro tenant', async () => {
+      const otherTenant = await prisma.tenant.create({
+        data: {
+          name: 'Tenant Evolution C',
+          slug: `evo-c-${runId}`,
+          email: 'c@teste.com',
+          phone: '33333333',
+        },
+      });
+      const otherType = await prisma.appointmentType.create({
+        data: {
+          tenantId: otherTenant.id,
+          name: 'Retorno',
+          defaultDurationMinutes: 40,
+        },
+      });
+      const otherNutri = await prisma.user.create({
+        data: {
+          name: 'Nutri C',
+          email: `nutri-evo-c-${runId}@teste.com`,
+          passwordHash: 'x',
+        },
+      });
+      const otherPatient = await prisma.patient.create({
+        data: { tenantId: otherTenant.id, fullName: 'Paciente Evolução C' },
+      });
+      const appointmentOfOtherTenant = await prisma.appointment.create({
+        data: {
+          tenantId: otherTenant.id,
+          patientId: otherPatient.id,
+          nutritionistUserId: otherNutri.id,
+          appointmentTypeId: otherType.id,
+          scheduledAt: new Date('2026-08-12T14:00:00.000Z'),
+          durationMinutes: 40,
+          createdByUserId: otherNutri.id,
+        },
+      });
+
+      await expect(
+        service.create(
+          tenantA.id,
+          nutritionistA.id,
+          Role.NUTRITIONIST,
+          patientA.id,
+          {
+            assessmentDate: '2026-08-12',
+            appointmentId: appointmentOfOtherTenant.id,
+          },
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      await prisma.appointment.deleteMany({
+        where: { tenantId: otherTenant.id },
+      });
+      await prisma.appointmentType.deleteMany({
+        where: { tenantId: otherTenant.id },
+      });
+      await prisma.patient.deleteMany({ where: { tenantId: otherTenant.id } });
+      await prisma.user.delete({ where: { id: otherNutri.id } });
+      await prisma.tenant.delete({ where: { id: otherTenant.id } });
+    });
   });
 });

@@ -16,6 +16,7 @@ import { PatientsModule } from './modules/patients/patients.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { ProfessionalProfileModule } from './modules/professional-profile/professional-profile.module';
 import { EvolutionsModule } from './modules/evolutions/evolutions.module';
+import { AppointmentsModule } from './modules/appointments/appointments.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { EvolutionsModule } from './modules/evolutions/evolutions.module';
     PlansModule,
     ProfessionalProfileModule,
     EvolutionsModule,
+    AppointmentsModule,
   ],
   controllers: [AppController],
   providers: [

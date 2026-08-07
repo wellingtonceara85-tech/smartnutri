@@ -358,6 +358,7 @@ export interface PatientEvolution {
   status: 'ACTIVE' | 'ARCHIVED';
   nutritionistUser: { id: string; name: string };
   createdByUser: { id: string; name: string };
+  appointment: { id: string; scheduledAt: string; appointmentType: { name: string } } | null;
   anthropometry: AnthropometricMeasurement | null;
   bioimpedance: BioimpedanceMeasurement | null;
   segmentalMeasurements: SegmentalBodyMeasurement[];
@@ -411,9 +412,128 @@ export interface EvolutionFormValues {
   clinicalNotes?: string;
   internalNotes?: string;
   nutritionistUserId?: string;
+  appointmentId?: string;
   anthropometry?: EvolutionFormAnthropometry;
   bioimpedance?: EvolutionFormBioimpedance & { bodyType?: string; deviceManufacturer?: string; notes?: string };
   segmentalMeasurements?: EvolutionFormSegmentalMeasurement[];
   segmentalImpedanceMeasurements?: EvolutionFormSegmentalImpedance[];
   referenceRanges?: EvolutionFormReferenceRange[];
+}
+
+// ============================================================================
+// Agenda / Consultas (Missão 0004)
+// ============================================================================
+
+export type AppointmentStatus =
+  | 'SCHEDULED'
+  | 'AWAITING_CONFIRMATION'
+  | 'CONFIRMED'
+  | 'IN_PROGRESS'
+  | 'DONE'
+  | 'CANCELLED_BY_CLINIC'
+  | 'CANCELLED_BY_PATIENT'
+  | 'NO_SHOW'
+  | 'RESCHEDULED';
+
+export type AppointmentModality = 'IN_PERSON' | 'ONLINE' | 'HOME_VISIT';
+
+export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
+  SCHEDULED: 'Agendada',
+  AWAITING_CONFIRMATION: 'Aguardando confirmação',
+  CONFIRMED: 'Confirmada',
+  IN_PROGRESS: 'Em atendimento',
+  DONE: 'Realizada',
+  CANCELLED_BY_CLINIC: 'Cancelada pela profissional',
+  CANCELLED_BY_PATIENT: 'Cancelada pelo paciente',
+  NO_SHOW: 'Não compareceu',
+  RESCHEDULED: 'Reagendada',
+};
+
+export const APPOINTMENT_MODALITY_LABELS: Record<AppointmentModality, string> = {
+  IN_PERSON: 'Presencial',
+  ONLINE: 'Online',
+  HOME_VISIT: 'Domiciliar',
+};
+
+export interface AppointmentType {
+  id: string;
+  name: string;
+  defaultDurationMinutes: number;
+  color: string | null;
+}
+
+export interface AppointmentStatusHistoryEntry {
+  id: string;
+  fromStatus: AppointmentStatus | null;
+  toStatus: AppointmentStatus;
+  reason: string | null;
+  changedAt: string;
+  changedByUser: { id: string; name: string };
+}
+
+export interface Appointment {
+  id: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  status: AppointmentStatus;
+  modality: AppointmentModality;
+  location: string | null;
+  onlineMeetingUrl: string | null;
+  adminNotes: string | null;
+  clinicalNotes: string | null;
+  patientVisibleNotes: string | null;
+  confirmedAt: string | null;
+  confirmationNotes: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  completedAt: string | null;
+  noShowAt: string | null;
+  patient: {
+    id: string;
+    fullName: string;
+    primaryPhone: string | null;
+    whatsappPhone: string | null;
+    birthDate: string | null;
+    status: PatientStatus;
+  };
+  nutritionistUser: { id: string; name: string };
+  appointmentType: { id: string; name: string; color: string | null };
+  createdByUser: { id: string; name: string };
+  rescheduledFromAppointment: { id: string; scheduledAt: string } | null;
+  rescheduledIntoAppointment: { id: string; scheduledAt: string } | null;
+  statusHistory: AppointmentStatusHistoryEntry[];
+  patientEvolutions: { id: string; assessmentDate: string; title: string | null }[];
+}
+
+export interface CreateAppointmentPayload {
+  patientId: string;
+  nutritionistUserId?: string;
+  appointmentTypeId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  modality: AppointmentModality;
+  location?: string;
+  onlineMeetingUrl?: string;
+  adminNotes?: string;
+  isConfirmed: boolean;
+}
+
+export interface UpdateAppointmentPayload {
+  appointmentTypeId?: string;
+  nutritionistUserId?: string;
+  scheduledAt?: string;
+  durationMinutes?: number;
+  modality?: AppointmentModality;
+  location?: string;
+  onlineMeetingUrl?: string;
+  adminNotes?: string;
+  clinicalNotes?: string;
+}
+
+export interface QueryAppointmentsParams {
+  startDate?: string;
+  endDate?: string;
+  nutritionistId?: string;
+  patientId?: string;
+  status?: AppointmentStatus;
 }
