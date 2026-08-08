@@ -537,3 +537,179 @@ export interface QueryAppointmentsParams {
   patientId?: string;
   status?: AppointmentStatus;
 }
+
+// ============================================================================
+// Plano Alimentar & Diário Alimentar (Missão 0005)
+// ============================================================================
+
+export type MealPlanStatus = 'DRAFT' | 'ACTIVE' | 'REPLACED' | 'COMPLETED' | 'ARCHIVED';
+
+export const MEAL_PLAN_STATUS_LABELS: Record<MealPlanStatus, string> = {
+  DRAFT: 'Rascunho',
+  ACTIVE: 'Ativo',
+  REPLACED: 'Substituído',
+  COMPLETED: 'Concluído',
+  ARCHIVED: 'Arquivado',
+};
+
+export interface MealItemSubstitution {
+  id: string;
+  description: string;
+  quantity: string | null;
+  unit: string | null;
+  householdMeasure: string | null;
+  notes: string | null;
+  displayOrder: number;
+}
+
+export interface MealItem {
+  id: string;
+  description: string;
+  quantity: string | null;
+  unit: string | null;
+  householdMeasure: string | null;
+  instructions: string | null;
+  displayOrder: number;
+  substitutions: MealItemSubstitution[];
+}
+
+export interface Meal {
+  id: string;
+  name: string;
+  scheduledTime: string | null;
+  timeDescription: string | null;
+  instructions: string | null;
+  displayOrder: number;
+  items: MealItem[];
+}
+
+export interface MealPlan {
+  id: string;
+  patientId: string;
+  title: string;
+  objective: string | null;
+  customObjective: string | null;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+  status: MealPlanStatus;
+  version: number;
+  parentMealPlanId: string | null;
+  generalGuidelines: string | null;
+  dailyWaterGoalMl: number | null;
+  patientVisibleNotes: string | null;
+  internalNotes: string | null;
+  isSharedWithPatient: boolean;
+  sharedAt: string | null;
+  sharedByUserId: string | null;
+  nutritionistUser: { id: string; name: string };
+  createdByUser: { id: string; name: string };
+  updatedByUser: { id: string; name: string } | null;
+  sharedByUser: { id: string; name: string } | null;
+  appointment: { id: string; scheduledAt: string; appointmentType: { name: string } } | null;
+  treatmentCycle: { id: string; cycleNumber: number } | null;
+  meals: Meal[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealItemSubstitutionFormValues {
+  description: string;
+  quantity?: number;
+  unit?: string;
+  householdMeasure?: string;
+  notes?: string;
+  displayOrder?: number;
+}
+
+export interface MealItemFormValues {
+  description: string;
+  quantity?: number;
+  unit?: string;
+  householdMeasure?: string;
+  instructions?: string;
+  displayOrder?: number;
+  substitutions?: MealItemSubstitutionFormValues[];
+}
+
+export interface MealFormValues {
+  name: string;
+  scheduledTime?: string;
+  timeDescription?: string;
+  instructions?: string;
+  displayOrder?: number;
+  items?: MealItemFormValues[];
+}
+
+export interface MealPlanFormValues {
+  title: string;
+  objective?: string;
+  customObjective?: string;
+  effectiveFrom: string;
+  effectiveUntil?: string;
+  nutritionistUserId?: string;
+  appointmentId?: string;
+  treatmentCycleId?: string;
+  generalGuidelines?: string;
+  dailyWaterGoalMl?: number;
+  patientVisibleNotes?: string;
+  internalNotes?: string;
+  meals?: MealFormValues[];
+}
+
+export type FoodDiarySource = 'PROFESSIONAL' | 'PATIENT_PORTAL';
+export type FoodDiaryStatus = 'PENDING_REVIEW' | 'REVIEWED' | 'NO_REVIEW_NEEDED';
+
+export const FOOD_DIARY_STATUS_LABELS: Record<FoodDiaryStatus, string> = {
+  PENDING_REVIEW: 'Aguardando avaliação',
+  REVIEWED: 'Avaliado',
+  NO_REVIEW_NEEDED: 'Sem necessidade de avaliação',
+};
+
+export interface FoodDiaryPhoto {
+  id: string;
+  url: string;
+  originalFileName: string | null;
+  createdAt: string;
+}
+
+export interface FoodDiaryEntry {
+  id: string;
+  patientId: string;
+  mealPlanId: string | null;
+  mealId: string | null;
+  entryDate: string;
+  entryTime: string | null;
+  mealName: string;
+  comment: string | null;
+  source: FoodDiarySource;
+  status: FoodDiaryStatus;
+  nutritionistFeedback: string | null;
+  createdByUser: { id: string; name: string } | null;
+  reviewedByUser: { id: string; name: string } | null;
+  reviewedAt: string | null;
+  mealPlan: { id: string; title: string; version: number } | null;
+  meal: { id: string; name: string } | null;
+  photos: FoodDiaryPhoto[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FoodDiaryEntryFormValues {
+  entryDate: string;
+  entryTime?: string;
+  mealName: string;
+  comment?: string;
+  mealPlanId?: string;
+  mealId?: string;
+}
+
+export interface ReviewFoodDiaryEntryValues {
+  status: 'REVIEWED' | 'NO_REVIEW_NEEDED';
+  nutritionistFeedback?: string;
+}
+
+export interface QueryFoodDiaryParams {
+  status?: FoodDiaryStatus;
+  dateFrom?: string;
+  dateTo?: string;
+}

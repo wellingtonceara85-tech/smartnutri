@@ -55,6 +55,12 @@ model Tenant {
   segmentalImpedanceMeasurements SegmentalImpedanceMeasurement[]
   measurementReferenceRanges     MeasurementReferenceRange[]
   evolutionPhotos                EvolutionPhoto[]
+  mealPlans                      MealPlan[]
+  meals                          Meal[]
+  mealItems                      MealItem[]
+  mealItemSubstitutions          MealItemSubstitution[]
+  foodDiaryEntries               FoodDiaryEntry[]
+  foodDiaryPhotos                FoodDiaryPhoto[]
 }
 
 enum Role {
@@ -93,6 +99,12 @@ model User {
   auditLogEntries         AuditLog[]
   patientsAsResponsible   Patient[]                  @relation("PatientResponsibleNutritionist")
   professionalProfiles    ProfessionalProfile[]
+  mealPlansAsNutritionist MealPlan[]                 @relation("MealPlanNutritionist")
+  createdMealPlans        MealPlan[]                 @relation("MealPlanCreatedBy")
+  updatedMealPlans        MealPlan[]                 @relation("MealPlanUpdatedBy")
+  sharedMealPlans         MealPlan[]                 @relation("MealPlanSharedBy")
+  createdFoodDiaryEntries FoodDiaryEntry[]            @relation("FoodDiaryCreatedBy")
+  reviewedFoodDiaryEntries FoodDiaryEntry[]           @relation("FoodDiaryReviewedBy")
 }
 
 /**
@@ -251,6 +263,8 @@ model Patient {
   payments                Payment[]
   patientEvolutions       PatientEvolution[]
   documents               Document[]
+  mealPlans               MealPlan[]
+  foodDiaryEntries        FoodDiaryEntry[]
 
   @@unique([tenantId, cpf])
   @@index([tenantId, status])
@@ -364,6 +378,7 @@ model TreatmentCycle {
   renewedIntoCycle TreatmentCycle? @relation("CycleRenewal")
   appointments     Appointment[]
   charges          Charge[]
+  mealPlans        MealPlan[]
 
   @@unique([tenantId, patientId, cycleNumber])
   @@index([tenantId, status])
@@ -436,6 +451,7 @@ model Appointment {
   statusHistory              AppointmentStatusHistory[]
   charges                    Charge[]
   patientEvolutions          PatientEvolution[]
+  mealPlans                  MealPlan[]
 
   @@index([tenantId, nutritionistUserId, scheduledAt])
   @@index([tenantId, patientId])
@@ -883,4 +899,226 @@ model AuditLog {
 
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, createdAt])
+}
+
+// ==========================================================================
+// Plano Alimentar (prescrição) / Diário Alimentar (consumo real)
+// ==========================================================================
+//
+// Dois conceitos deliberadamente separados e nunca misturados:
+// - PRESCRIÇÃO: o que a nutricionista orientou (MealPlan → Meal → MealItem
+//   → MealItemSubstitution).
+// - CONSUMO REAL: o que o paciente informou que realmente comeu
+//   (FoodDiaryEntry), com vínculo opcional (não obrigatório) a um
+//   MealPlan/Meal prescrito.
+//
+// A modelagem já prepara o terreno para o futuro Portal do Paciente
+// (FoodDiarySource.PATIENT_PORTAL, createdByUserId opcional em
+// FoodDiaryEntry) sem implementá-lo nesta missão.
+
+enum MealPlanStatus {
+  DRAFT
+  ACTIVE
+  REPLACED
+  COMPLETED
+  ARCHIVED
+}
+
+/**
+ * Toda versão de um plano é uma linha própria (nunca sobrescrita) —
+ * `parentMealPlanId` encadeia v1 → v2 → v3. `duplicate` (cópia
+ * independente, sem parentMealPlanId) é conceitualmente diferente de
+ * `new-version` (mantém a cadeia). Regra de negócio: no máximo um plano
+ * ACTIVE por paciente — ativar um novo com outro já ativo marca o anterior
+ * como REPLACED dentro da mesma transação (nunca apaga).
+ */
+model MealPlan {
+  id                 String         @id @default(uuid())
+  tenantId           String
+  patientId          String
+  nutritionistUserId String
+  appointmentId      String?
+  treatmentCycleId   String?
+
+  title           String
+  objective       String?
+  customObjective String?
+
+  effectiveFrom  DateTime  @db.Date
+  effectiveUntil DateTime? @db.Date
+
+  status MealPlanStatus @default(DRAFT)
+
+  version          Int     @default(1)
+  parentMealPlanId String?
+
+  generalGuidelines String?
+  dailyWaterGoalMl  Int?
+
+  patientVisibleNotes String?
+  internalNotes       String?
+
+  isSharedWithPatient Boolean   @default(false)
+  sharedAt            DateTime?
+  sharedByUserId      String?
+
+  createdByUserId String
+  updatedByUserId String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient          Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  nutritionistUser User            @relation("MealPlanNutritionist", fields: [nutritionistUserId], references: [id])
+  appointment      Appointment?    @relation(fields: [appointmentId], references: [id])
+  treatmentCycle   TreatmentCycle? @relation(fields: [treatmentCycleId], references: [id])
+  parentMealPlan   MealPlan?       @relation("MealPlanVersion", fields: [parentMealPlanId], references: [id])
+  childVersions    MealPlan[]      @relation("MealPlanVersion")
+  createdByUser    User            @relation("MealPlanCreatedBy", fields: [createdByUserId], references: [id])
+  updatedByUser    User?           @relation("MealPlanUpdatedBy", fields: [updatedByUserId], references: [id])
+  sharedByUser     User?           @relation("MealPlanSharedBy", fields: [sharedByUserId], references: [id])
+  meals            Meal[]
+  foodDiaryEntries FoodDiaryEntry[]
+
+  @@index([tenantId, patientId, status])
+  @@index([tenantId, patientId, parentMealPlanId])
+}
+
+/// Sugestões de nome (Café da manhã, Almoço...) ficam só na UI — `name` é texto livre, nunca enum.
+model Meal {
+  id              String   @id @default(uuid())
+  tenantId        String
+  mealPlanId      String
+  name            String
+  scheduledTime   String?
+  timeDescription String?
+  instructions    String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mealPlan         MealPlan         @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  items            MealItem[]
+  foodDiaryEntries FoodDiaryEntry[]
+
+  @@index([tenantId, mealPlanId])
+}
+
+/// Unidade e medida caseira coexistem (ex.: "100 g" + "4 colheres de sopa") — nenhuma é obrigatória.
+model MealItem {
+  id               String   @id @default(uuid())
+  tenantId         String
+  mealId           String
+  description      String
+  quantity         Decimal? @db.Decimal(8, 2)
+  unit             String?
+  householdMeasure String?
+  instructions     String?
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  meal          Meal                   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  substitutions MealItemSubstitution[]
+
+  @@index([tenantId, mealId])
+}
+
+/// Lista simples de opções equivalentes ao item original — suficiente para o MVP, sem SubstitutionGroup separado.
+model MealItemSubstitution {
+  id               String   @id @default(uuid())
+  tenantId         String
+  mealItemId       String
+  description      String
+  quantity         Decimal? @db.Decimal(8, 2)
+  unit             String?
+  householdMeasure String?
+  notes            String?
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mealItem MealItem @relation(fields: [mealItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, mealItemId])
+}
+
+enum FoodDiarySource {
+  PROFESSIONAL
+  PATIENT_PORTAL
+}
+
+enum FoodDiaryStatus {
+  PENDING_REVIEW
+  REVIEWED
+  NO_REVIEW_NEEDED
+}
+
+/**
+ * Registro do que o paciente REALMENTE consumiu — nunca confundir com
+ * MealItem (prescrição). `mealPlanId`/`mealId` são opcionais: o paciente
+ * pode registrar uma refeição fora do plano. `createdByUserId` é opcional
+ * porque, quando o Portal do Paciente existir, o registro poderá vir
+ * diretamente do paciente (sem usuário profissional autor).
+ */
+model FoodDiaryEntry {
+  id        String  @id @default(uuid())
+  tenantId  String
+  patientId String
+
+  mealPlanId String?
+  mealId     String?
+
+  entryDate DateTime @db.Date
+  entryTime String?
+
+  mealName String
+  comment  String?
+
+  source FoodDiarySource @default(PROFESSIONAL)
+  status FoodDiaryStatus @default(PENDING_REVIEW)
+
+  createdByUserId String?
+
+  reviewedByUserId     String?
+  reviewedAt           DateTime?
+  nutritionistFeedback String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient        Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  mealPlan       MealPlan?        @relation(fields: [mealPlanId], references: [id])
+  meal           Meal?            @relation(fields: [mealId], references: [id])
+  createdByUser  User?            @relation("FoodDiaryCreatedBy", fields: [createdByUserId], references: [id])
+  reviewedByUser User?            @relation("FoodDiaryReviewedBy", fields: [reviewedByUserId], references: [id])
+  photos         FoodDiaryPhoto[]
+
+  @@index([tenantId, patientId, entryDate])
+  @@index([tenantId, status])
+}
+
+/// Fotos de refeição são dados sensíveis do paciente — mesmo padrão do EvolutionPhoto: nunca públicas, URL sempre pré-assinada.
+model FoodDiaryPhoto {
+  id               String    @id @default(uuid())
+  tenantId         String
+  foodDiaryEntryId String
+  storageKey       String
+  originalFileName String?
+  mimeType         String
+  sizeBytes        Int
+  displayOrder     Int       @default(0)
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  foodDiaryEntry FoodDiaryEntry @relation(fields: [foodDiaryEntryId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, foodDiaryEntryId])
 }

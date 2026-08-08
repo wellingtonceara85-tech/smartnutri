@@ -428,6 +428,254 @@ async function main() {
   }
 
   // ------------------------------------------------------------------------
+  // Plano alimentar e diário alimentar (Missão 0005) — v1 substituída por
+  // v2 (encadeada via parentMealPlanId), mostrando o histórico de versões;
+  // diário com registros nos três status (pendente/avaliado/sem necessidade
+  // de avaliação), um deles vinculado ao plano/refeição prescritos.
+  const existingMealPlansCount = await prisma.mealPlan.count({
+    where: { tenantId: tenant.id, patientId: beatrizId },
+  });
+
+  if (existingMealPlansCount === 0) {
+    const mealPlanV1 = await prisma.mealPlan.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        nutritionistUserId,
+        createdByUserId: nutritionistUserId,
+        title: 'Plano de reeducação alimentar',
+        objective: 'Redução de gordura corporal com manutenção de massa magra',
+        effectiveFrom: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+        status: 'REPLACED',
+        version: 1,
+        generalGuidelines: 'Beber pelo menos 2 litros de água por dia. Evitar frituras.',
+        dailyWaterGoalMl: 2000,
+        patientVisibleNotes: 'Vamos com calma — o objetivo é criar hábitos que durem.',
+        internalNotes: 'Paciente relatou resistência a laticínios — evitar leite integral.',
+        meals: {
+          create: [
+            {
+              tenantId: tenant.id,
+              name: 'Café da manhã',
+              scheduledTime: '07:30',
+              displayOrder: 0,
+              items: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    description: 'Pão integral',
+                    quantity: 2,
+                    unit: 'fatias',
+                    displayOrder: 0,
+                    substitutions: {
+                      create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                    },
+                  },
+                  {
+                    tenantId: tenant.id,
+                    description: 'Ovo mexido',
+                    quantity: 2,
+                    unit: 'unidades',
+                    displayOrder: 1,
+                  },
+                ],
+              },
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Almoço',
+              scheduledTime: '12:30',
+              displayOrder: 1,
+              items: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    description: 'Arroz integral',
+                    quantity: 4,
+                    unit: 'colheres de sopa',
+                    displayOrder: 0,
+                  },
+                  {
+                    tenantId: tenant.id,
+                    description: 'Frango grelhado',
+                    quantity: 150,
+                    unit: 'g',
+                    householdMeasure: '1 filé médio',
+                    displayOrder: 1,
+                    substitutions: {
+                      create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      include: { meals: { include: { items: true } } },
+    });
+
+    const mealPlanV2 = await prisma.mealPlan.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        nutritionistUserId,
+        createdByUserId: nutritionistUserId,
+        title: 'Plano de reeducação alimentar',
+        objective: 'Redução de gordura corporal com manutenção de massa magra',
+        effectiveFrom: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        status: 'ACTIVE',
+        version: 2,
+        parentMealPlanId: mealPlanV1.id,
+        generalGuidelines: 'Beber pelo menos 2,5 litros de água por dia. Evitar frituras e ultraprocessados.',
+        dailyWaterGoalMl: 2500,
+        patientVisibleNotes: 'Ótima evolução! Ajustamos as porções do almoço para o novo objetivo.',
+        internalNotes: 'Paciente relatou resistência a laticínios — evitar leite integral.',
+        meals: {
+          create: [
+            {
+              tenantId: tenant.id,
+              name: 'Café da manhã',
+              scheduledTime: '07:30',
+              displayOrder: 0,
+              items: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    description: 'Pão integral',
+                    quantity: 2,
+                    unit: 'fatias',
+                    displayOrder: 0,
+                    substitutions: {
+                      create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                    },
+                  },
+                  {
+                    tenantId: tenant.id,
+                    description: 'Ovo mexido',
+                    quantity: 2,
+                    unit: 'unidades',
+                    displayOrder: 1,
+                  },
+                  {
+                    tenantId: tenant.id,
+                    description: 'Fruta da estação',
+                    quantity: 1,
+                    unit: 'unidade',
+                    displayOrder: 2,
+                  },
+                ],
+              },
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Almoço',
+              scheduledTime: '12:30',
+              displayOrder: 1,
+              items: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    description: 'Arroz integral',
+                    quantity: 3,
+                    unit: 'colheres de sopa',
+                    displayOrder: 0,
+                  },
+                  {
+                    tenantId: tenant.id,
+                    description: 'Frango grelhado',
+                    quantity: 150,
+                    unit: 'g',
+                    householdMeasure: '1 filé médio',
+                    displayOrder: 1,
+                    substitutions: {
+                      create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                    },
+                  },
+                  {
+                    tenantId: tenant.id,
+                    description: 'Salada verde à vontade',
+                    displayOrder: 2,
+                  },
+                ],
+              },
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Lanche da tarde',
+              timeDescription: 'Meio da tarde',
+              displayOrder: 2,
+              items: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    description: 'Iogurte natural desnatado',
+                    quantity: 1,
+                    unit: 'pote',
+                    displayOrder: 0,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      include: { meals: { include: { items: true } } },
+    });
+
+    const almocoV2 = mealPlanV2.meals.find((m) => m.name === 'Almoço')!;
+
+    await prisma.foodDiaryEntry.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        mealPlanId: mealPlanV2.id,
+        mealId: almocoV2.id,
+        entryDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        entryTime: '12:45',
+        mealName: 'Almoço',
+        comment: 'Segui certinho o plano, troquei o frango por peixe.',
+        source: 'PROFESSIONAL',
+        status: 'REVIEWED',
+        createdByUserId: nutritionistUserId,
+        reviewedByUserId: nutritionistUserId,
+        reviewedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        nutritionistFeedback: 'Ótima escolha! Continue variando as proteínas dessa forma.',
+      },
+    });
+
+    await prisma.foodDiaryEntry.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        entryDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        entryTime: '20:00',
+        mealName: 'Jantar fora de casa',
+        comment: 'Fui a um aniversário e comi um pouco de bolo.',
+        source: 'PROFESSIONAL',
+        status: 'NO_REVIEW_NEEDED',
+        createdByUserId: nutritionistUserId,
+        reviewedByUserId: nutritionistUserId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    await prisma.foodDiaryEntry.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        entryDate: new Date(),
+        entryTime: '08:00',
+        mealName: 'Café da manhã',
+        comment: 'Segui o plano normalmente.',
+        source: 'PROFESSIONAL',
+        status: 'PENDING_REVIEW',
+        createdByUserId: nutritionistUserId,
+      },
+    });
+  }
+
+  // ------------------------------------------------------------------------
   // Consultas fictícias (Missão 0004) — cobrem os principais status/cenários
   // exigidos: passadas/hoje/futuras, confirmada/aguardando/realizada/
   // cancelada/falta/reagendada, online/presencial, e um vínculo consulta→

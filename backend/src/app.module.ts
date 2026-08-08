@@ -17,6 +17,8 @@ import { PlansModule } from './modules/plans/plans.module';
 import { ProfessionalProfileModule } from './modules/professional-profile/professional-profile.module';
 import { EvolutionsModule } from './modules/evolutions/evolutions.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
+import { MealPlansModule } from './modules/meal-plans/meal-plans.module';
+import { FoodDiaryModule } from './modules/food-diary/food-diary.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { AppointmentsModule } from './modules/appointments/appointments.module';
     ProfessionalProfileModule,
     EvolutionsModule,
     AppointmentsModule,
+    MealPlansModule,
+    FoodDiaryModule,
   ],
   controllers: [AppController],
   providers: [

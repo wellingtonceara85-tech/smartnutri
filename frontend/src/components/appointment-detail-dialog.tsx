@@ -458,6 +458,15 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
                   >
                     Criar evolução corporal agora
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<Link href={`/pacientes/${appointment.patient.id}/plano-alimentar/novo?appointmentId=${appointment.id}`} />}
+                  >
+                    Criar plano alimentar agora
+                  </Button>
                   <ReturnSuggestions patientId={appointment.patient.id} nutritionistUserId={appointment.nutritionistUser.id} />
                 </div>
               )}

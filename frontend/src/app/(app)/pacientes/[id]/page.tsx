@@ -11,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PatientAppointmentsTab } from '@/components/patient-appointments-tab';
 import { PatientEvolutionTab } from '@/components/patient-evolution-tab';
+import { PatientFoodDiaryTab } from '@/components/patient-food-diary-tab';
+import { PatientMealPlanTab } from '@/components/patient-meal-plan-tab';
 import { PatientStatusBadge } from '@/components/patient-status-badge';
 import { listPatientAppointments } from '@/lib/api/appointments';
 import { getPatient } from '@/lib/api/patients';
@@ -149,6 +151,8 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
           <TabsTrigger value="appointments">Consultas</TabsTrigger>
           <TabsTrigger value="financial">Financeiro</TabsTrigger>
           {canSeeEvolution && <TabsTrigger value="evolution">Evolução</TabsTrigger>}
+          {canSeeEvolution && <TabsTrigger value="meal-plan">Plano Alimentar</TabsTrigger>}
+          {canSeeEvolution && <TabsTrigger value="food-diary">Diário Alimentar</TabsTrigger>}
           <TabsTrigger value="documents">Documentos</TabsTrigger>
           <TabsTrigger value="history">Histórico</TabsTrigger>
         </TabsList>
@@ -241,6 +245,16 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
         {canSeeEvolution && (
           <TabsContent value="evolution">
             <PatientEvolutionTab patient={patient} />
+          </TabsContent>
+        )}
+        {canSeeEvolution && (
+          <TabsContent value="meal-plan">
+            <PatientMealPlanTab patientId={patient.id} />
+          </TabsContent>
+        )}
+        {canSeeEvolution && (
+          <TabsContent value="food-diary">
+            <PatientFoodDiaryTab patientId={patient.id} />
           </TabsContent>
         )}
         <TabsContent value="documents">
