@@ -77,7 +77,7 @@ Cada pasta (`backend/`, `frontend/`) é um projeto Node independente com seu pr�
 ```bash
 # backend
 cd backend
-cp .env.example .env
+cp .env.example .env.dev   # não .env — esse nome é reservado pelo deploy do Firebase Functions
 npm install
 npx prisma migrate deploy
 npx prisma db seed
@@ -88,6 +88,38 @@ cd frontend
 cp .env.example .env.local
 npm install
 npm run dev -- -p 3010   # ajuste NEXT_PUBLIC_API_URL em .env.local se mudar a porta do backend
+```
+
+## Ambiente de Homologação
+
+Versão pública de demonstração, com dados 100% fictícios — não usar para dados reais de pacientes.
+
+- **URL**: https://smartnutri-rho.vercel.app
+- **Login**: mesmas credenciais de demonstração da seção acima (`admin@clinicademo.com.br` / `nutricionista@clinicademo.com.br` / `recepcao@clinicademo.com.br`, senha `Demo@123456`)
+
+### Arquitetura
+
+| Camada | Onde roda |
+| --- | --- |
+| Frontend (Next.js) | Vercel |
+| Backend (NestJS) | Firebase Cloud Functions (2nd gen), região `southamerica-east1`, wrapper em `backend/src/functions.ts` envolvendo o mesmo app Express usado localmente |
+| Banco de dados | Neon (Postgres serverless) — `DATABASE_URL` pooled para runtime, `DIRECT_DATABASE_URL` direta só para migrations (ver `backend/prisma.config.ts`) |
+| Storage (fotos, documentos) | Cloudflare R2, bucket privado (`smartnutri-staging`), acesso só via URL assinada — nunca público |
+
+### Variáveis de ambiente do backend em staging
+
+Carregadas pelo Firebase a partir de `backend/.env.<project-id>` (variáveis não sensíveis, arquivo local não versionado) + Secret Manager (`DATABASE_URL`, `DIRECT_DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`, via `firebase functions:secrets:set`). Nenhum valor real fica neste repositório — ver `backend/.env.example` para a lista completa de variáveis e o que cada uma faz.
+
+Diferenças-chave em relação ao ambiente local: `COOKIE_SECURE=true` e `COOKIE_SAME_SITE=none` (obrigatório para o cookie de sessão funcionar entre domínios diferentes — frontend na Vercel, backend no Cloud Functions), `CORS_ORIGIN` restrito à URL da Vercel, e `/api/docs` (Swagger) protegido por Basic Auth (`SWAGGER_USER`/`SWAGGER_PASSWORD`).
+
+### Redeploy manual
+
+```bash
+# backend (a partir da raiz do repo)
+cd backend && npm run build && cd ..
+firebase deploy --only functions
+
+# frontend: automático — todo push em `main` no GitHub dispara build na Vercel
 ```
 
 ## Estrutura
@@ -195,10 +227,12 @@ Cobrem: validação de CPF/telefone, normalização, duplicidade de CPF/nome por
 
 ## Status
 
-**Etapa 1 (Fundação), Etapa 2 (Pacientes e Planos), Missão 0003 (Identidade profissional + Evolução corporal), Missão 0003.1 (Refinamento da análise segmentar) e Missão 0004 (Agenda, consultas e fluxo clínico) concluídas.**
+**Etapa 1 (Fundação), Etapa 2 (Pacientes e Planos), Missão 0003 (Identidade profissional + Evolução corporal), Missão 0003.1 (Refinamento da análise segmentar), Missão 0004 (Agenda, consultas e fluxo clínico) e Missão 0004.5 (Homologação, deploy e infraestrutura cloud) concluídas.**
 
 - Etapa 1: autenticação completa (login, refresh com rotação, logout, `/me`), RBAC no backend, isolamento por clínica (tenant), modelo de dados completo no Prisma, shell protegido no frontend, seed de demonstração.
 - Etapa 2: CRUD completo de Pacientes (listagem com busca/filtros/paginação, cadastro, edição, perfil com abas, arquivamento) e Planos (listagem, cadastro/edição em modal, ativação/inativação), com RBAC granular por ação, validação de CPF/telefone, auditoria e testes automatizados.
 - Missão 0003: produto renomeado para SmartNutri (sem nome de clínica fixo em lugar nenhum da UI); identidade profissional completa (nome, foto, CRN, contato, paleta de cores aplicada em tempo real) com página própria (`/perfil`); módulo de evolução corporal completo (antropometria, bioimpedância, análise segmentar, fotos com storage seguro via MinIO, comparação entre avaliações com pontos percentuais, gráficos reutilizáveis, mapa corporal SVG original em 3 variantes, relatório de impressão); RECEPTION com blackout total do módulo clínico; base pronta para o futuro Portal do Paciente sem implementá-lo ainda.
+
+- Missão 0004.5: ambiente de homologação público (ver seção "Ambiente de Homologação" acima) — frontend na Vercel, backend em Firebase Cloud Functions, banco na Neon, storage no Cloudflare R2. Sessão cross-domain corrigida (cookie de refresh com `Path=/` e `SameSite=None`), Swagger protegido por Basic Auth em staging, política de limpeza automática de imagens de container configurada.
 
 Próximas etapas (ciclos, agenda, financeiro, dashboard/relatórios, qualidade) seguem o plano de entrega incremental do projeto.

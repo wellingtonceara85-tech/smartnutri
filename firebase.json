@@ -1,0 +1,17 @@
+{
+  "functions": [
+    {
+      "source": "backend",
+      "codebase": "default",
+      "runtime": "nodejs20",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "src",
+        "test",
+        "coverage",
+        "prisma/migrations"
+      ]
+    }
+  ]
+}
