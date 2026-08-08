@@ -72,8 +72,8 @@ export default function PlanosPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Planos</h1>
-          <p className="text-muted-foreground">Catálogo de planos de acompanhamento nutricional</p>
+          <h1 className="text-2xl font-bold tracking-tight">Planos</h1>
+          <p className="text-sm text-muted-foreground">Catálogo de planos de acompanhamento nutricional</p>
         </div>
         {isAdmin && (
           <Button onClick={openCreateDialog}>

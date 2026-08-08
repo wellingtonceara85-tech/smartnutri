@@ -14,8 +14,8 @@ export default function NovaAvaliacaoPage({ params }: { params: Promise<{ id: st
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Nova avaliação</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-bold tracking-tight">Nova avaliação</h1>
+        <p className="text-sm text-muted-foreground">
           {appointmentId
             ? 'Avaliação vinculada à consulta selecionada'
             : 'Registro independente — não sobrescreve avaliações anteriores'}

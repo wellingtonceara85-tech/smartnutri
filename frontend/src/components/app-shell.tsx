@@ -99,9 +99,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-1">
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-background md:flex">
         <div className="flex h-16 items-center border-b px-6">
-          <span className="truncate font-semibold text-primary">SmartNutri</span>
+          <span className="truncate text-lg font-semibold tracking-tight text-primary">SmartNutri</span>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 p-3">
+        <nav className="flex flex-1 flex-col gap-1.5 p-3">
           {visibleItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
@@ -110,11 +110,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
                   isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
-                <Icon className="size-4" />
+                <Icon className="size-4.5" />
                 {item.label}
               </Link>
             );

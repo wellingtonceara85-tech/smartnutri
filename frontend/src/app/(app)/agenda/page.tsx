@@ -164,8 +164,8 @@ function AgendaPageContent() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Agenda</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
+          <p className="text-sm text-muted-foreground">
             {appointmentsQuery.isLoading ? 'Carregando...' : `${appointments.length} consulta(s) no período`}
           </p>
         </div>

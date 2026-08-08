@@ -137,7 +137,7 @@ export default function EvolucaoDetailPage({ params }: { params: Promise<{ id: s
     return <Skeleton className="h-96 w-full" />;
   }
   if (!evolutionQuery.data) {
-    return <p className="text-muted-foreground">Avaliação não encontrada.</p>;
+    return <p className="text-sm text-muted-foreground">Avaliação não encontrada.</p>;
   }
 
   const evolution = evolutionQuery.data;
@@ -150,11 +150,11 @@ export default function EvolucaoDetailPage({ params }: { params: Promise<{ id: s
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">
+          <h1 className="text-2xl font-bold tracking-tight">
             {formatCalendarDate(evolution.assessmentDate)}
             {evolution.title && <span className="text-muted-foreground"> — {evolution.title}</span>}
           </h1>
-          <p className="text-muted-foreground">Responsável: {evolution.nutritionistUser.name}</p>
+          <p className="text-sm text-muted-foreground">Responsável: {evolution.nutritionistUser.name}</p>
           {evolution.appointment && (
             <p className="text-sm text-muted-foreground">
               Consulta relacionada: {evolution.appointment.appointmentType.name} —{' '}

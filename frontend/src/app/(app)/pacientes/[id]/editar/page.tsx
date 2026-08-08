@@ -41,8 +41,8 @@ export default function EditarPacientePage({ params }: { params: Promise<{ id: s
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Editar paciente</h1>
-        <p className="text-muted-foreground">{patientQuery.data.fullName}</p>
+        <h1 className="text-2xl font-bold tracking-tight">Editar paciente</h1>
+        <p className="text-sm text-muted-foreground">{patientQuery.data.fullName}</p>
       </div>
       <PatientForm mode="edit" patient={patientQuery.data} />
     </div>

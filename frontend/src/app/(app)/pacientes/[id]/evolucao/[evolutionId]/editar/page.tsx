@@ -23,14 +23,14 @@ export default function EditarAvaliacaoPage({ params }: { params: Promise<{ id: 
   }
 
   if (!evolutionQuery.data) {
-    return <p className="text-muted-foreground">Avaliação não encontrada.</p>;
+    return <p className="text-sm text-muted-foreground">Avaliação não encontrada.</p>;
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Editar avaliação</h1>
-        <p className="text-muted-foreground">{formatCalendarDate(evolutionQuery.data.assessmentDate)}</p>
+        <h1 className="text-2xl font-bold tracking-tight">Editar avaliação</h1>
+        <p className="text-sm text-muted-foreground">{formatCalendarDate(evolutionQuery.data.assessmentDate)}</p>
       </div>
       <EvolutionForm mode="edit" patientId={id} evolution={evolutionQuery.data} />
     </div>

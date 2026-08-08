@@ -58,16 +58,16 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          {greeting}, {firstName}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-[1.75rem]">
+          {greeting}, {firstName}!
         </h1>
         {todayAppointmentsQuery.isLoading ? (
           <Skeleton className="mt-1 h-5 w-64" />
         ) : todayAppointments.length === 0 ? (
-          <p className="text-muted-foreground">Sua agenda está livre hoje.</p>
+          <p className="text-sm text-muted-foreground">Sua agenda está livre hoje.</p>
         ) : (
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Você possui {todayAppointments.length} consulta{todayAppointments.length > 1 ? 's' : ''} agendada
             {todayAppointments.length > 1 ? 's' : ''} para hoje.
             {awaitingConfirmation > 0 && ` ${awaitingConfirmation} ainda aguarda${awaitingConfirmation > 1 ? 'm' : ''} confirmação.`}

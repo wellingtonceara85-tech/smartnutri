@@ -91,8 +91,8 @@ export default function PacientesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Pacientes</h1>
-          <p className="text-muted-foreground">Cadastro e acompanhamento dos pacientes da clínica</p>
+          <h1 className="text-2xl font-bold tracking-tight">Pacientes</h1>
+          <p className="text-sm text-muted-foreground">Cadastro e acompanhamento dos pacientes da clínica</p>
         </div>
         <Button nativeButton={false} render={<Link href="/pacientes/novo" />}>
           <Plus className="size-4" />
@@ -210,7 +210,7 @@ export default function PacientesPage() {
                           <Link href={`/pacientes/${patient.id}`} className="font-medium hover:underline">
                             {patient.fullName}
                           </Link>
-                          {patient.socialName && <div className="text-xs text-muted-foreground">({patient.socialName})</div>}
+                          {patient.socialName && <div className="text-sm text-muted-foreground">({patient.socialName})</div>}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col text-sm">

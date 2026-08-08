@@ -104,7 +104,7 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
             </Avatar>
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">{patient.fullName}</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{patient.fullName}</h1>
                 <PatientStatusBadge status={patient.status} />
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -256,7 +256,7 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
                   <div key={entry.id} className="flex items-center justify-between p-4 text-sm">
                     <div>
                       <p className="font-medium">{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</p>
-                      <p className="text-muted-foreground">{entry.actorUser?.name ?? 'Sistema'}</p>
+                      <p className="text-sm text-muted-foreground">{entry.actorUser?.name ?? 'Sistema'}</p>
                     </div>
                     <span className="text-muted-foreground">{new Date(entry.createdAt).toLocaleString('pt-BR')}</span>
                   </div>

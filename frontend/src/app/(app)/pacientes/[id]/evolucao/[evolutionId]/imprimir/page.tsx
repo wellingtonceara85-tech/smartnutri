@@ -55,7 +55,7 @@ export default function ImprimirAvaliacaoPage({ params }: { params: Promise<{ id
     return <Skeleton className="h-96 w-full" />;
   }
   if (!evolutionQuery.data || !patientQuery.data || !profileQuery.data) {
-    return <p className="text-muted-foreground">Não foi possível carregar o relatório.</p>;
+    return <p className="text-sm text-muted-foreground">Não foi possível carregar o relatório.</p>;
   }
 
   const evolution = evolutionQuery.data;

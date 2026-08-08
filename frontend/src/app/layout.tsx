@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { AppQueryProvider } from '@/lib/query-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const plusJakartaSans = Plus_Jakarta_Sans({
+  variable: '--font-plus-jakarta-sans',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
 });
 
 const geistMono = Geist_Mono({
@@ -27,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="pt-BR" className={`${plusJakartaSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-muted/30">
         <AppQueryProvider>
           <AuthProvider>
