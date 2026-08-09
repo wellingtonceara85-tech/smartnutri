@@ -96,36 +96,43 @@ export default function ImprimirPlanoAlimentarPage({ params }: { params: Promise
         </section>
       )}
 
-      {plan.meals.map((meal) => (
-        <section key={meal.id} className="print:break-inside-avoid">
-          <h3 className="mb-1 text-sm font-semibold">
-            {meal.name}
-            {(meal.scheduledTime || meal.timeDescription) && (
-              <span className="font-normal text-muted-foreground"> — {meal.scheduledTime ?? meal.timeDescription}</span>
-            )}
-          </h3>
-          {meal.instructions && <p className="mb-1 text-sm text-muted-foreground">{meal.instructions}</p>}
-          <ul className="flex flex-col gap-1.5 text-sm">
-            {meal.items.map((item) => (
-              <li key={item.id}>
-                <span className="font-medium">{item.description}</span>
-                {(item.quantity || item.unit || item.householdMeasure) && (
-                  <span className="text-muted-foreground">
-                    {' — '}
-                    {[item.quantity, item.unit].filter(Boolean).join(' ')}
-                    {item.householdMeasure ? ` (${item.householdMeasure})` : ''}
-                  </span>
+      {plan.days.map((day) => (
+        <div key={day.id} className="flex flex-col gap-3">
+          {plan.organizationType !== 'DAILY' && (
+            <h2 className="border-b pb-1 text-base font-semibold print:[break-after:avoid]">{day.name}</h2>
+          )}
+          {day.meals.map((meal) => (
+            <section key={meal.id} className="print:break-inside-avoid">
+              <h3 className="mb-1 text-sm font-semibold">
+                {meal.name}
+                {(meal.scheduledTime || meal.timeDescription) && (
+                  <span className="font-normal text-muted-foreground"> — {meal.scheduledTime ?? meal.timeDescription}</span>
                 )}
-                {item.instructions && <div className="text-muted-foreground">{item.instructions}</div>}
-                {item.substitutions.length > 0 && (
-                  <div className="text-muted-foreground">
-                    Substituir por: {item.substitutions.map((s) => s.description).join(' ou ')}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+              </h3>
+              {meal.instructions && <p className="mb-1 text-sm text-muted-foreground">{meal.instructions}</p>}
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {meal.items.map((item) => (
+                  <li key={item.id}>
+                    <span className="font-medium">{item.description}</span>
+                    {(item.quantity || item.unit || item.householdMeasure) && (
+                      <span className="text-muted-foreground">
+                        {' — '}
+                        {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                        {item.householdMeasure ? ` (${item.householdMeasure})` : ''}
+                      </span>
+                    )}
+                    {item.instructions && <div className="text-muted-foreground">{item.instructions}</div>}
+                    {item.substitutions.length > 0 && (
+                      <div className="text-muted-foreground">
+                        Substituir por: {item.substitutions.map((s) => s.description).join(' ou ')}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       ))}
 
       {plan.patientVisibleNotes && (

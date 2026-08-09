@@ -39,6 +39,7 @@ import {
 } from '@/lib/api/meal-plans';
 import { ApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
+import { cn } from '@/lib/utils';
 import { formatCalendarDate } from '@/lib/masks';
 import { MEAL_PLAN_STATUS_LABELS, type MealPlanStatus } from '@/lib/types';
 
@@ -60,6 +61,8 @@ export default function PlanoAlimentarDetailPage({ params }: { params: Promise<{
   const [shareChecked, setShareChecked] = useState(false);
   const [shareNotes, setShareNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [showAllDays, setShowAllDays] = useState(false);
 
   const mealPlanQuery = useQuery({
     queryKey: ['meal-plan', mealPlanId],
@@ -166,6 +169,9 @@ export default function PlanoAlimentarDetailPage({ params }: { params: Promise<{
   }
 
   const plan = mealPlanQuery.data;
+  const isMultiDay = plan.organizationType !== 'DAILY';
+  const effectiveSelectedDayId = selectedDayId ?? plan.days[0]?.id ?? null;
+  const daysToRender = !isMultiDay || showAllDays ? plan.days : plan.days.filter((d) => d.id === effectiveSelectedDayId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -257,51 +263,85 @@ export default function PlanoAlimentarDetailPage({ params }: { params: Promise<{
         <p className="text-sm text-muted-foreground">Meta diária de água: {plan.dailyWaterGoalMl} ml</p>
       )}
 
-      <div className="flex flex-col gap-4">
-        {plan.meals.map((meal) => (
-          <Card key={meal.id}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                {meal.name}
-                {(meal.scheduledTime || meal.timeDescription) && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {meal.scheduledTime ?? meal.timeDescription}
-                  </span>
-                )}
-              </CardTitle>
-              {meal.instructions && <p className="text-sm text-muted-foreground">{meal.instructions}</p>}
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {meal.items.map((item) => (
-                <div key={item.id} className="rounded-md border p-3 text-sm">
-                  <p className="font-medium">
-                    {item.description}
-                    {(item.quantity || item.unit || item.householdMeasure) && (
-                      <span className="text-muted-foreground">
-                        {' — '}
-                        {[item.quantity, item.unit].filter(Boolean).join(' ')}
-                        {item.householdMeasure ? ` (${item.householdMeasure})` : ''}
+      {isMultiDay && (
+        <div className="flex flex-wrap items-center gap-2">
+          {plan.days.map((day) => (
+            <button
+              key={day.id}
+              type="button"
+              onClick={() => {
+                setSelectedDayId(day.id);
+                setShowAllDays(false);
+              }}
+              className={cn(
+                'shrink-0 rounded-lg border px-3 py-2 text-sm transition-colors',
+                !showAllDays && day.id === effectiveSelectedDayId
+                  ? 'border-primary bg-primary/10 font-medium'
+                  : 'border-input hover:bg-muted/40',
+              )}
+            >
+              {day.name}
+            </button>
+          ))}
+          <Button type="button" variant={showAllDays ? 'default' : 'outline'} size="sm" onClick={() => setShowAllDays((v) => !v)}>
+            {showAllDays ? 'Ver por dia' : 'Ver semana completa'}
+          </Button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-6">
+        {daysToRender.map((day) => (
+          <div key={day.id} className="flex flex-col gap-4">
+            {isMultiDay && <h2 className="text-lg font-semibold">{day.name}</h2>}
+            {day.meals.length === 0 && isMultiDay && (
+              <p className="text-sm text-muted-foreground">Nenhuma refeição cadastrada para este dia.</p>
+            )}
+            {day.meals.map((meal) => (
+              <Card key={meal.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    {meal.name}
+                    {(meal.scheduledTime || meal.timeDescription) && (
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {meal.scheduledTime ?? meal.timeDescription}
                       </span>
                     )}
-                  </p>
-                  {item.instructions && <p className="text-muted-foreground">{item.instructions}</p>}
-                  {item.substitutions.length > 0 && (
-                    <div className="mt-1.5 border-t pt-1.5 text-muted-foreground">
-                      <p className="text-xs font-medium">Substituir por:</p>
-                      <ul className="list-inside list-disc">
-                        {item.substitutions.map((sub) => (
-                          <li key={sub.id}>
-                            {sub.description}
-                            {(sub.quantity || sub.unit) && ` — ${[sub.quantity, sub.unit].filter(Boolean).join(' ')}`}
-                          </li>
-                        ))}
-                      </ul>
+                  </CardTitle>
+                  {meal.instructions && <p className="text-sm text-muted-foreground">{meal.instructions}</p>}
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {meal.items.map((item) => (
+                    <div key={item.id} className="rounded-md border p-3 text-sm">
+                      <p className="font-medium">
+                        {item.description}
+                        {(item.quantity || item.unit || item.householdMeasure) && (
+                          <span className="text-muted-foreground">
+                            {' — '}
+                            {[item.quantity, item.unit].filter(Boolean).join(' ')}
+                            {item.householdMeasure ? ` (${item.householdMeasure})` : ''}
+                          </span>
+                        )}
+                      </p>
+                      {item.instructions && <p className="text-muted-foreground">{item.instructions}</p>}
+                      {item.substitutions.length > 0 && (
+                        <div className="mt-1.5 border-t pt-1.5 text-muted-foreground">
+                          <p className="text-xs font-medium">Substituir por:</p>
+                          <ul className="list-inside list-disc">
+                            {item.substitutions.map((sub) => (
+                              <li key={sub.id}>
+                                {sub.description}
+                                {(sub.quantity || sub.unit) && ` — ${[sub.quantity, sub.unit].filter(Boolean).join(' ')}`}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ))}
       </div>
 

@@ -552,6 +552,46 @@ export const MEAL_PLAN_STATUS_LABELS: Record<MealPlanStatus, string> = {
   ARCHIVED: 'Arquivado',
 };
 
+export type MealPlanOrganizationType = 'DAILY' | 'WEEKLY' | 'CUSTOM_CYCLE';
+
+export const MEAL_PLAN_ORGANIZATION_TYPE_LABELS: Record<MealPlanOrganizationType, string> = {
+  DAILY: 'Rotina diária',
+  WEEKLY: 'Semanal',
+  CUSTOM_CYCLE: 'Ciclo personalizado',
+};
+
+export type WeekDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+
+export const WEEK_DAY_LABELS: Record<WeekDay, string> = {
+  MONDAY: 'Segunda-feira',
+  TUESDAY: 'Terça-feira',
+  WEDNESDAY: 'Quarta-feira',
+  THURSDAY: 'Quinta-feira',
+  FRIDAY: 'Sexta-feira',
+  SATURDAY: 'Sábado',
+  SUNDAY: 'Domingo',
+};
+
+export const WEEK_DAY_SHORT_LABELS: Record<WeekDay, string> = {
+  MONDAY: 'Seg',
+  TUESDAY: 'Ter',
+  WEDNESDAY: 'Qua',
+  THURSDAY: 'Qui',
+  FRIDAY: 'Sex',
+  SATURDAY: 'Sáb',
+  SUNDAY: 'Dom',
+};
+
+export const WEEK_DAY_ORDER: WeekDay[] = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+];
+
 export interface MealItemSubstitution {
   id: string;
   description: string;
@@ -583,6 +623,16 @@ export interface Meal {
   items: MealItem[];
 }
 
+export interface MealPlanDay {
+  id: string;
+  name: string;
+  dayNumber: number | null;
+  weekDay: WeekDay | null;
+  displayOrder: number;
+  notes: string | null;
+  meals: Meal[];
+}
+
 export interface MealPlan {
   id: string;
   patientId: string;
@@ -594,6 +644,8 @@ export interface MealPlan {
   status: MealPlanStatus;
   version: number;
   parentMealPlanId: string | null;
+  organizationType: MealPlanOrganizationType;
+  cycleLength: number | null;
   generalGuidelines: string | null;
   dailyWaterGoalMl: number | null;
   patientVisibleNotes: string | null;
@@ -607,7 +659,7 @@ export interface MealPlan {
   sharedByUser: { id: string; name: string } | null;
   appointment: { id: string; scheduledAt: string; appointmentType: { name: string } } | null;
   treatmentCycle: { id: string; cycleNumber: number } | null;
-  meals: Meal[];
+  days: MealPlanDay[];
   createdAt: string;
   updatedAt: string;
 }
@@ -640,6 +692,15 @@ export interface MealFormValues {
   items?: MealItemFormValues[];
 }
 
+export interface MealPlanDayFormValues {
+  name: string;
+  dayNumber?: number;
+  weekDay?: WeekDay;
+  displayOrder?: number;
+  notes?: string;
+  meals?: MealFormValues[];
+}
+
 export interface MealPlanFormValues {
   title: string;
   objective?: string;
@@ -649,11 +710,13 @@ export interface MealPlanFormValues {
   nutritionistUserId?: string;
   appointmentId?: string;
   treatmentCycleId?: string;
+  organizationType?: MealPlanOrganizationType;
+  cycleLength?: number;
   generalGuidelines?: string;
   dailyWaterGoalMl?: number;
   patientVisibleNotes?: string;
   internalNotes?: string;
-  meals?: MealFormValues[];
+  days?: MealPlanDayFormValues[];
 }
 
 export type FoodDiarySource = 'PROFESSIONAL' | 'PATIENT_PORTAL';
@@ -688,7 +751,7 @@ export interface FoodDiaryEntry {
   reviewedByUser: { id: string; name: string } | null;
   reviewedAt: string | null;
   mealPlan: { id: string; title: string; version: number } | null;
-  meal: { id: string; name: string } | null;
+  meal: { id: string; name: string; mealPlanDay: { id: string; name: string } | null } | null;
   photos: FoodDiaryPhoto[];
   createdAt: string;
   updatedAt: string;

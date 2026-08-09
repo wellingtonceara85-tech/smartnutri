@@ -452,58 +452,68 @@ async function main() {
         dailyWaterGoalMl: 2000,
         patientVisibleNotes: 'Vamos com calma — o objetivo é criar hábitos que durem.',
         internalNotes: 'Paciente relatou resistência a laticínios — evitar leite integral.',
-        meals: {
+        days: {
           create: [
             {
               tenantId: tenant.id,
-              name: 'Café da manhã',
-              scheduledTime: '07:30',
+              name: 'Rotina diária',
+              dayNumber: 1,
               displayOrder: 0,
-              items: {
+              meals: {
                 create: [
                   {
                     tenantId: tenant.id,
-                    description: 'Pão integral',
-                    quantity: 2,
-                    unit: 'fatias',
+                    name: 'Café da manhã',
+                    scheduledTime: '07:30',
                     displayOrder: 0,
-                    substitutions: {
-                      create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                    items: {
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Pão integral',
+                          quantity: 2,
+                          unit: 'fatias',
+                          displayOrder: 0,
+                          substitutions: {
+                            create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                          },
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Ovo mexido',
+                          quantity: 2,
+                          unit: 'unidades',
+                          displayOrder: 1,
+                        },
+                      ],
                     },
                   },
                   {
                     tenantId: tenant.id,
-                    description: 'Ovo mexido',
-                    quantity: 2,
-                    unit: 'unidades',
+                    name: 'Almoço',
+                    scheduledTime: '12:30',
                     displayOrder: 1,
-                  },
-                ],
-              },
-            },
-            {
-              tenantId: tenant.id,
-              name: 'Almoço',
-              scheduledTime: '12:30',
-              displayOrder: 1,
-              items: {
-                create: [
-                  {
-                    tenantId: tenant.id,
-                    description: 'Arroz integral',
-                    quantity: 4,
-                    unit: 'colheres de sopa',
-                    displayOrder: 0,
-                  },
-                  {
-                    tenantId: tenant.id,
-                    description: 'Frango grelhado',
-                    quantity: 150,
-                    unit: 'g',
-                    householdMeasure: '1 filé médio',
-                    displayOrder: 1,
-                    substitutions: {
-                      create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                    items: {
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Arroz integral',
+                          quantity: 4,
+                          unit: 'colheres de sopa',
+                          displayOrder: 0,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Frango grelhado',
+                          quantity: 150,
+                          unit: 'g',
+                          householdMeasure: '1 filé médio',
+                          displayOrder: 1,
+                          substitutions: {
+                            create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                          },
+                        },
+                      ],
                     },
                   },
                 ],
@@ -512,7 +522,7 @@ async function main() {
           ],
         },
       },
-      include: { meals: { include: { items: true } } },
+      include: { days: { include: { meals: { include: { items: true } } } } },
     });
 
     const mealPlanV2 = await prisma.mealPlan.create({
@@ -531,88 +541,98 @@ async function main() {
         dailyWaterGoalMl: 2500,
         patientVisibleNotes: 'Ótima evolução! Ajustamos as porções do almoço para o novo objetivo.',
         internalNotes: 'Paciente relatou resistência a laticínios — evitar leite integral.',
-        meals: {
+        days: {
           create: [
             {
               tenantId: tenant.id,
-              name: 'Café da manhã',
-              scheduledTime: '07:30',
+              name: 'Rotina diária',
+              dayNumber: 1,
               displayOrder: 0,
-              items: {
+              meals: {
                 create: [
                   {
                     tenantId: tenant.id,
-                    description: 'Pão integral',
-                    quantity: 2,
-                    unit: 'fatias',
+                    name: 'Café da manhã',
+                    scheduledTime: '07:30',
                     displayOrder: 0,
-                    substitutions: {
-                      create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                    items: {
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Pão integral',
+                          quantity: 2,
+                          unit: 'fatias',
+                          displayOrder: 0,
+                          substitutions: {
+                            create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                          },
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Ovo mexido',
+                          quantity: 2,
+                          unit: 'unidades',
+                          displayOrder: 1,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Fruta da estação',
+                          quantity: 1,
+                          unit: 'unidade',
+                          displayOrder: 2,
+                        },
+                      ],
                     },
                   },
                   {
                     tenantId: tenant.id,
-                    description: 'Ovo mexido',
-                    quantity: 2,
-                    unit: 'unidades',
+                    name: 'Almoço',
+                    scheduledTime: '12:30',
                     displayOrder: 1,
-                  },
-                  {
-                    tenantId: tenant.id,
-                    description: 'Fruta da estação',
-                    quantity: 1,
-                    unit: 'unidade',
-                    displayOrder: 2,
-                  },
-                ],
-              },
-            },
-            {
-              tenantId: tenant.id,
-              name: 'Almoço',
-              scheduledTime: '12:30',
-              displayOrder: 1,
-              items: {
-                create: [
-                  {
-                    tenantId: tenant.id,
-                    description: 'Arroz integral',
-                    quantity: 3,
-                    unit: 'colheres de sopa',
-                    displayOrder: 0,
-                  },
-                  {
-                    tenantId: tenant.id,
-                    description: 'Frango grelhado',
-                    quantity: 150,
-                    unit: 'g',
-                    householdMeasure: '1 filé médio',
-                    displayOrder: 1,
-                    substitutions: {
-                      create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                    items: {
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Arroz integral',
+                          quantity: 3,
+                          unit: 'colheres de sopa',
+                          displayOrder: 0,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Frango grelhado',
+                          quantity: 150,
+                          unit: 'g',
+                          householdMeasure: '1 filé médio',
+                          displayOrder: 1,
+                          substitutions: {
+                            create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                          },
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Salada verde à vontade',
+                          displayOrder: 2,
+                        },
+                      ],
                     },
                   },
                   {
                     tenantId: tenant.id,
-                    description: 'Salada verde à vontade',
+                    name: 'Lanche da tarde',
+                    timeDescription: 'Meio da tarde',
                     displayOrder: 2,
-                  },
-                ],
-              },
-            },
-            {
-              tenantId: tenant.id,
-              name: 'Lanche da tarde',
-              timeDescription: 'Meio da tarde',
-              displayOrder: 2,
-              items: {
-                create: [
-                  {
-                    tenantId: tenant.id,
-                    description: 'Iogurte natural desnatado',
-                    quantity: 1,
-                    unit: 'pote',
-                    displayOrder: 0,
+                    items: {
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Iogurte natural desnatado',
+                          quantity: 1,
+                          unit: 'pote',
+                          displayOrder: 0,
+                        },
+                      ],
+                    },
                   },
                 ],
               },
@@ -620,10 +640,10 @@ async function main() {
           ],
         },
       },
-      include: { meals: { include: { items: true } } },
+      include: { days: { include: { meals: { include: { items: true } } } } },
     });
 
-    const almocoV2 = mealPlanV2.meals.find((m) => m.name === 'Almoço')!;
+    const almocoV2 = mealPlanV2.days[0].meals.find((m) => m.name === 'Almoço')!;
 
     await prisma.foodDiaryEntry.create({
       data: {
@@ -671,6 +691,175 @@ async function main() {
         source: 'PROFESSIONAL',
         status: 'PENDING_REVIEW',
         createdByUserId: nutritionistUserId,
+      },
+    });
+
+    // Plano semanal (Missão 0005.1) — Segunda e Quarta com refeições
+    // diferentes, demais dias do domingo à sábado deixados vazios de
+    // propósito para exercitar o estado vazio "copiar de outro dia".
+    const carlosId = patientIdByName.get('Carlos Eduardo Souza')!;
+    await prisma.mealPlan.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: carlosId,
+        nutritionistUserId,
+        createdByUserId: nutritionistUserId,
+        title: 'Plano semanal — ganho de massa magra',
+        objective: 'Ganho de massa muscular',
+        effectiveFrom: new Date(),
+        status: 'DRAFT',
+        organizationType: 'WEEKLY',
+        generalGuidelines: 'Priorizar proteína magra em todas as refeições principais.',
+        dailyWaterGoalMl: 3000,
+        days: {
+          create: [
+            {
+              tenantId: tenant.id,
+              name: 'Segunda-feira',
+              weekDay: 'MONDAY',
+              dayNumber: 1,
+              displayOrder: 0,
+              meals: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    name: 'Café da manhã',
+                    scheduledTime: '07:00',
+                    displayOrder: 0,
+                    items: {
+                      create: [
+                        { tenantId: tenant.id, description: 'Ovos mexidos', quantity: 3, unit: 'unidades', displayOrder: 0 },
+                        { tenantId: tenant.id, description: 'Aveia em flocos', quantity: 3, unit: 'colheres de sopa', displayOrder: 1 },
+                      ],
+                    },
+                  },
+                  {
+                    tenantId: tenant.id,
+                    name: 'Almoço',
+                    scheduledTime: '12:30',
+                    displayOrder: 1,
+                    items: {
+                      create: [
+                        { tenantId: tenant.id, description: 'Arroz branco', quantity: 5, unit: 'colheres de sopa', displayOrder: 0 },
+                        { tenantId: tenant.id, description: 'Patinho moído', quantity: 150, unit: 'g', displayOrder: 1 },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            { tenantId: tenant.id, name: 'Terça-feira', weekDay: 'TUESDAY', dayNumber: 2, displayOrder: 1 },
+            {
+              tenantId: tenant.id,
+              name: 'Quarta-feira',
+              weekDay: 'WEDNESDAY',
+              dayNumber: 3,
+              displayOrder: 2,
+              meals: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    name: 'Café da manhã',
+                    scheduledTime: '07:00',
+                    displayOrder: 0,
+                    items: {
+                      create: [{ tenantId: tenant.id, description: 'Vitamina de banana com whey', quantity: 1, unit: 'copo', displayOrder: 0 }],
+                    },
+                  },
+                  {
+                    tenantId: tenant.id,
+                    name: 'Almoço',
+                    scheduledTime: '12:30',
+                    displayOrder: 1,
+                    items: {
+                      create: [
+                        { tenantId: tenant.id, description: 'Batata-doce', quantity: 200, unit: 'g', displayOrder: 0 },
+                        { tenantId: tenant.id, description: 'Filé de tilápia', quantity: 150, unit: 'g', displayOrder: 1 },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            { tenantId: tenant.id, name: 'Quinta-feira', weekDay: 'THURSDAY', dayNumber: 4, displayOrder: 3 },
+            { tenantId: tenant.id, name: 'Sexta-feira', weekDay: 'FRIDAY', dayNumber: 5, displayOrder: 4 },
+            { tenantId: tenant.id, name: 'Sábado', weekDay: 'SATURDAY', dayNumber: 6, displayOrder: 5 },
+            { tenantId: tenant.id, name: 'Domingo', weekDay: 'SUNDAY', dayNumber: 7, displayOrder: 6 },
+          ],
+        },
+      },
+    });
+
+    // Ciclo personalizado (Missão 0005.1) — "Dia de treino"/"Dia sem
+    // treino" se repetindo, sem qualquer amarração a dias da semana.
+    const danielaId = patientIdByName.get('Daniela Ferreira Lima')!;
+    await prisma.mealPlan.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: danielaId,
+        nutritionistUserId,
+        createdByUserId: nutritionistUserId,
+        title: 'Ciclo treino/descanso',
+        objective: 'Performance esportiva',
+        effectiveFrom: new Date(),
+        status: 'DRAFT',
+        organizationType: 'CUSTOM_CYCLE',
+        cycleLength: 2,
+        generalGuidelines: 'Alternar os dois dias conforme a agenda de treinos da semana.',
+        days: {
+          create: [
+            {
+              tenantId: tenant.id,
+              name: 'Dia de treino',
+              dayNumber: 1,
+              displayOrder: 0,
+              meals: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    name: 'Pré-treino',
+                    timeDescription: '1h antes do treino',
+                    displayOrder: 0,
+                    items: {
+                      create: [{ tenantId: tenant.id, description: 'Banana com aveia', quantity: 1, unit: 'porção', displayOrder: 0 }],
+                    },
+                  },
+                  {
+                    tenantId: tenant.id,
+                    name: 'Pós-treino',
+                    timeDescription: 'Logo após o treino',
+                    displayOrder: 1,
+                    items: {
+                      create: [{ tenantId: tenant.id, description: 'Whey protein com água', quantity: 1, unit: 'dose', displayOrder: 0 }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Dia sem treino',
+              dayNumber: 2,
+              displayOrder: 1,
+              meals: {
+                create: [
+                  {
+                    tenantId: tenant.id,
+                    name: 'Almoço',
+                    scheduledTime: '12:30',
+                    displayOrder: 0,
+                    items: {
+                      create: [
+                        { tenantId: tenant.id, description: 'Arroz integral', quantity: 3, unit: 'colheres de sopa', displayOrder: 0 },
+                        { tenantId: tenant.id, description: 'Grão-de-bico', quantity: 4, unit: 'colheres de sopa', displayOrder: 1 },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
       },
     });
   }

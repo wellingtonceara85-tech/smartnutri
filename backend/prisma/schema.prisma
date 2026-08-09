@@ -56,6 +56,7 @@ model Tenant {
   measurementReferenceRanges     MeasurementReferenceRange[]
   evolutionPhotos                EvolutionPhoto[]
   mealPlans                      MealPlan[]
+  mealPlanDays                   MealPlanDay[]
   meals                          Meal[]
   mealItems                      MealItem[]
   mealItemSubstitutions          MealItemSubstitution[]
@@ -925,6 +926,30 @@ enum MealPlanStatus {
 }
 
 /**
+ * Como o plano está organizado no tempo — introduzido na Missão 0005.1.
+ * DAILY: mesmas refeições todo dia (um único MealPlanDay implícito).
+ * WEEKLY: refeições diferentes por dia da semana (7 MealPlanDay fixos).
+ * CUSTOM_CYCLE: sequência livre de dias/rotinas (Dia 1, Treino A, etc.),
+ * sem amarrar a dias da semana.
+ */
+enum MealPlanOrganizationType {
+  DAILY
+  WEEKLY
+  CUSTOM_CYCLE
+}
+
+/// Dia da semana estrutural — só usado por MealPlanDay em organizationType WEEKLY; nunca inferido em CUSTOM_CYCLE (Dia 3 não é necessariamente quarta-feira).
+enum WeekDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+/**
  * Toda versão de um plano é uma linha própria (nunca sobrescrita) —
  * `parentMealPlanId` encadeia v1 → v2 → v3. `duplicate` (cópia
  * independente, sem parentMealPlanId) é conceitualmente diferente de
@@ -948,6 +973,10 @@ model MealPlan {
   effectiveUntil DateTime? @db.Date
 
   status MealPlanStatus @default(DRAFT)
+
+  organizationType MealPlanOrganizationType @default(DAILY)
+  /// Indicação livre de duração do ciclo (ex.: 7, 15) — só relevante em CUSTOM_CYCLE; não valida a quantidade real de dias cadastrados.
+  cycleLength      Int?
 
   version          Int     @default(1)
   parentMealPlanId String?
@@ -979,18 +1008,47 @@ model MealPlan {
   createdByUser    User            @relation("MealPlanCreatedBy", fields: [createdByUserId], references: [id])
   updatedByUser    User?           @relation("MealPlanUpdatedBy", fields: [updatedByUserId], references: [id])
   sharedByUser     User?           @relation("MealPlanSharedBy", fields: [sharedByUserId], references: [id])
-  meals            Meal[]
+  days             MealPlanDay[]
   foodDiaryEntries FoodDiaryEntry[]
 
   @@index([tenantId, patientId, status])
   @@index([tenantId, patientId, parentMealPlanId])
 }
 
+/**
+ * Camada intermediária entre MealPlan e Meal — introduzida na Missão 0005.1
+ * para suportar rotina diária, semana e ciclos personalizados sem forçar
+ * nomes artificiais de refeição. Todo MealPlan tem pelo menos um
+ * MealPlanDay, inclusive em organizationType DAILY (um único dia implícito
+ * "Rotina diária", não exposto como tal na UI desse modo). `name` é sempre
+ * texto livre e editável (ex.: "Segunda-feira", "Dia 1", "Dia de treino") —
+ * nunca um enum fixo. `weekDay` só é preenchido em WEEKLY; `dayNumber` é
+ * usado livremente em CUSTOM_CYCLE para ordenação/exibição opcional.
+ */
+model MealPlanDay {
+  id           String   @id @default(uuid())
+  tenantId     String
+  mealPlanId   String
+  name         String
+  dayNumber    Int?
+  weekDay      WeekDay?
+  displayOrder Int      @default(0)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  meals    Meal[]
+
+  @@index([tenantId, mealPlanId])
+}
+
 /// Sugestões de nome (Café da manhã, Almoço...) ficam só na UI — `name` é texto livre, nunca enum.
 model Meal {
   id              String   @id @default(uuid())
   tenantId        String
-  mealPlanId      String
+  mealPlanDayId   String
   name            String
   scheduledTime   String?
   timeDescription String?
@@ -1000,11 +1058,11 @@ model Meal {
   updatedAt       DateTime @updatedAt
 
   tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  mealPlan         MealPlan         @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  mealPlanDay      MealPlanDay      @relation(fields: [mealPlanDayId], references: [id], onDelete: Cascade)
   items            MealItem[]
   foodDiaryEntries FoodDiaryEntry[]
 
-  @@index([tenantId, mealPlanId])
+  @@index([tenantId, mealPlanDayId])
 }
 
 /// Unidade e medida caseira coexistem (ex.: "100 g" + "4 colheres de sopa") — nenhuma é obrigatória.

@@ -5,7 +5,11 @@ import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { MealPlansService } from '../meal-plans/meal-plans.service';
-import { FoodDiaryStatus, Role } from '../../generated/prisma/client';
+import {
+  FoodDiaryStatus,
+  MealPlanOrganizationType,
+  Role,
+} from '../../generated/prisma/client';
 import { FoodDiaryService } from './food-diary.service';
 
 jest.setTimeout(15000);
@@ -25,7 +29,13 @@ describe('FoodDiaryService (integração)', () => {
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [FoodDiaryService, MealPlansService, AuditService, PrismaService, StorageService],
+      providers: [
+        FoodDiaryService,
+        MealPlansService,
+        AuditService,
+        PrismaService,
+        StorageService,
+      ],
     }).compile();
 
     service = moduleRef.get(FoodDiaryService);
@@ -34,27 +44,55 @@ describe('FoodDiaryService (integração)', () => {
     await prisma.$connect();
 
     tenantA = await prisma.tenant.create({
-      data: { name: 'Tenant Diary A', slug: `diary-a-${runId}`, email: 'a@teste.com', phone: '11111111' },
+      data: {
+        name: 'Tenant Diary A',
+        slug: `diary-a-${runId}`,
+        email: 'a@teste.com',
+        phone: '11111111',
+      },
     });
     tenantB = await prisma.tenant.create({
-      data: { name: 'Tenant Diary B', slug: `diary-b-${runId}`, email: 'b@teste.com', phone: '22222222' },
+      data: {
+        name: 'Tenant Diary B',
+        slug: `diary-b-${runId}`,
+        email: 'b@teste.com',
+        phone: '22222222',
+      },
     });
 
     nutritionistA = await prisma.user.create({
-      data: { name: 'Nutri Diary A', email: `nutri-diary-a-${runId}@teste.com`, passwordHash: 'x' },
+      data: {
+        name: 'Nutri Diary A',
+        email: `nutri-diary-a-${runId}@teste.com`,
+        passwordHash: 'x',
+      },
     });
     await prisma.userClinic.create({
-      data: { userId: nutritionistA.id, tenantId: tenantA.id, role: Role.NUTRITIONIST },
+      data: {
+        userId: nutritionistA.id,
+        tenantId: tenantA.id,
+        role: Role.NUTRITIONIST,
+      },
     });
 
-    patientA = await prisma.patient.create({ data: { tenantId: tenantA.id, fullName: 'Paciente Diary A' } });
-    patientB = await prisma.patient.create({ data: { tenantId: tenantB.id, fullName: 'Paciente Diary B' } });
+    patientA = await prisma.patient.create({
+      data: { tenantId: tenantA.id, fullName: 'Paciente Diary A' },
+    });
+    patientB = await prisma.patient.create({
+      data: { tenantId: tenantB.id, fullName: 'Paciente Diary B' },
+    });
   }, 20000);
 
   afterAll(async () => {
-    await prisma.foodDiaryEntry.deleteMany({ where: { tenantId: { in: [tenantA.id, tenantB.id] } } });
-    await prisma.mealPlan.deleteMany({ where: { tenantId: { in: [tenantA.id, tenantB.id] } } });
-    await prisma.patient.deleteMany({ where: { id: { in: [patientA.id, patientB.id] } } });
+    await prisma.foodDiaryEntry.deleteMany({
+      where: { tenantId: { in: [tenantA.id, tenantB.id] } },
+    });
+    await prisma.mealPlan.deleteMany({
+      where: { tenantId: { in: [tenantA.id, tenantB.id] } },
+    });
+    await prisma.patient.deleteMany({
+      where: { id: { in: [patientA.id, patientB.id] } },
+    });
     await prisma.userClinic.deleteMany({ where: { userId: nutritionistA.id } });
     await prisma.user.deleteMany({ where: { id: nutritionistA.id } });
     await prisma.tenant.delete({ where: { id: tenantA.id } });
@@ -63,11 +101,16 @@ describe('FoodDiaryService (integração)', () => {
   });
 
   it('registra uma refeição consumida sem exigir vínculo com o plano prescrito', async () => {
-    const created = await service.create(tenantA.id, nutritionistA.id, patientA.id, {
-      entryDate: '2026-08-08',
-      mealName: 'Lanche da tarde',
-      comment: 'Comeu fora do horário combinado',
-    });
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-08',
+        mealName: 'Lanche da tarde',
+        comment: 'Comeu fora do horário combinado',
+      },
+    );
 
     expect(created.mealName).toBe('Lanche da tarde');
     expect(created.mealPlanId).toBeNull();
@@ -76,42 +119,113 @@ describe('FoodDiaryService (integração)', () => {
   });
 
   it('vincula a um plano/refeição prescritos quando informado e válido', async () => {
-    const plan = await mealPlansService.create(tenantA.id, nutritionistA.id, Role.NUTRITIONIST, patientA.id, {
-      title: 'Plano vinculável',
-      effectiveFrom: '2026-08-01',
-      meals: [{ name: 'Almoço', items: [{ description: 'Arroz e feijão' }] }],
-    });
-    const mealId = plan.meals[0].id;
+    const plan = await mealPlansService.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      patientA.id,
+      {
+        title: 'Plano vinculável',
+        effectiveFrom: '2026-08-01',
+        days: [
+          {
+            name: 'Rotina diária',
+            meals: [
+              { name: 'Almoço', items: [{ description: 'Arroz e feijão' }] },
+            ],
+          },
+        ],
+      },
+    );
+    const mealId = plan.days[0].meals[0].id;
 
-    const entry = await service.create(tenantA.id, nutritionistA.id, patientA.id, {
-      entryDate: '2026-08-08',
-      mealName: 'Almoço',
-      mealPlanId: plan.id,
-      mealId,
-    });
+    const entry = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-08',
+        mealName: 'Almoço',
+        mealPlanId: plan.id,
+        mealId,
+      },
+    );
 
     expect(entry.mealPlan?.id).toBe(plan.id);
     expect(entry.meal?.id).toBe(mealId);
   });
 
+  it('inclui o nome do dia (MealPlanDay) prescrito quando o plano é WEEKLY ou CUSTOM_CYCLE', async () => {
+    const plan = await mealPlansService.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      patientA.id,
+      {
+        title: 'Plano semanal vinculável',
+        effectiveFrom: '2026-08-01',
+        organizationType: MealPlanOrganizationType.WEEKLY,
+        days: [
+          {
+            name: 'Segunda-feira',
+            weekDay: 'MONDAY',
+            dayNumber: 1,
+            meals: [{ name: 'Jantar' }],
+          },
+        ],
+      },
+    );
+    const day = plan.days[0];
+    const mealId = day.meals[0].id;
+
+    const entry = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-08',
+        mealName: 'Jantar',
+        mealPlanId: plan.id,
+        mealId,
+      },
+    );
+
+    expect(entry.meal?.mealPlanDay?.id).toBe(day.id);
+    expect(entry.meal?.mealPlanDay?.name).toBe('Segunda-feira');
+  });
+
   it('rejeita vínculo com refeição que não pertence ao plano informado', async () => {
-    const planA = await mealPlansService.create(tenantA.id, nutritionistA.id, Role.NUTRITIONIST, patientA.id, {
-      title: 'Plano A',
-      effectiveFrom: '2026-08-01',
-      meals: [{ name: 'Café', items: [] }],
-    });
-    const planB = await mealPlansService.create(tenantA.id, nutritionistA.id, Role.NUTRITIONIST, patientA.id, {
-      title: 'Plano B',
-      effectiveFrom: '2026-08-01',
-      meals: [{ name: 'Jantar', items: [] }],
-    });
+    const planA = await mealPlansService.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      patientA.id,
+      {
+        title: 'Plano A',
+        effectiveFrom: '2026-08-01',
+        days: [{ name: 'Rotina diária', meals: [{ name: 'Café', items: [] }] }],
+      },
+    );
+    const planB = await mealPlansService.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      patientA.id,
+      {
+        title: 'Plano B',
+        effectiveFrom: '2026-08-01',
+        days: [
+          { name: 'Rotina diária', meals: [{ name: 'Jantar', items: [] }] },
+        ],
+      },
+    );
 
     await expect(
       service.create(tenantA.id, nutritionistA.id, patientA.id, {
         entryDate: '2026-08-08',
         mealName: 'Café',
         mealPlanId: planA.id,
-        mealId: planB.meals[0].id,
+        mealId: planB.days[0].meals[0].id,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -127,16 +241,30 @@ describe('FoodDiaryService (integração)', () => {
 
   it('isola registros por tenant — plano de outro tenant não é aceito mesmo com UUID válido', async () => {
     const nutritionistB = await prisma.user.create({
-      data: { name: 'Nutri Diary B', email: `nutri-diary-b-${runId}@teste.com`, passwordHash: 'x' },
+      data: {
+        name: 'Nutri Diary B',
+        email: `nutri-diary-b-${runId}@teste.com`,
+        passwordHash: 'x',
+      },
     });
     await prisma.userClinic.create({
-      data: { userId: nutritionistB.id, tenantId: tenantB.id, role: Role.NUTRITIONIST },
+      data: {
+        userId: nutritionistB.id,
+        tenantId: tenantB.id,
+        role: Role.NUTRITIONIST,
+      },
     });
 
-    const planOfTenantB = await mealPlansService.create(tenantB.id, nutritionistB.id, Role.NUTRITIONIST, patientB.id, {
-      title: 'Plano do outro tenant',
-      effectiveFrom: '2026-08-01',
-    });
+    const planOfTenantB = await mealPlansService.create(
+      tenantB.id,
+      nutritionistB.id,
+      Role.NUTRITIONIST,
+      patientB.id,
+      {
+        title: 'Plano do outro tenant',
+        effectiveFrom: '2026-08-01',
+      },
+    );
 
     await expect(
       service.create(tenantA.id, nutritionistA.id, patientA.id, {
@@ -152,15 +280,25 @@ describe('FoodDiaryService (integração)', () => {
   });
 
   it('review registra feedback profissional e nunca julga automaticamente', async () => {
-    const created = await service.create(tenantA.id, nutritionistA.id, patientA.id, {
-      entryDate: '2026-08-08',
-      mealName: 'Jantar',
-    });
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-08',
+        mealName: 'Jantar',
+      },
+    );
 
-    const reviewed = await service.review(tenantA.id, nutritionistA.id, created.id, {
-      status: FoodDiaryStatus.REVIEWED,
-      nutritionistFeedback: 'Boa escolha, continue assim.',
-    });
+    const reviewed = await service.review(
+      tenantA.id,
+      nutritionistA.id,
+      created.id,
+      {
+        status: FoodDiaryStatus.REVIEWED,
+        nutritionistFeedback: 'Boa escolha, continue assim.',
+      },
+    );
 
     expect(reviewed.status).toBe(FoodDiaryStatus.REVIEWED);
     expect(reviewed.nutritionistFeedback).toBe('Boa escolha, continue assim.');
@@ -169,10 +307,15 @@ describe('FoodDiaryService (integração)', () => {
   });
 
   it('rejeita marcar um registro como PENDING_REVIEW via review()', async () => {
-    const created = await service.create(tenantA.id, nutritionistA.id, patientA.id, {
-      entryDate: '2026-08-08',
-      mealName: 'Refeição qualquer',
-    });
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-08',
+        mealName: 'Refeição qualquer',
+      },
+    );
 
     await expect(
       service.review(tenantA.id, nutritionistA.id, created.id, {
@@ -182,31 +325,47 @@ describe('FoodDiaryService (integração)', () => {
   });
 
   it('archive é soft delete — some da listagem mas o registro permanece', async () => {
-    const created = await service.create(tenantA.id, nutritionistA.id, patientA.id, {
-      entryDate: '2026-08-08',
-      mealName: 'Registro a arquivar',
-    });
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-08',
+        mealName: 'Registro a arquivar',
+      },
+    );
 
     await service.archive(tenantA.id, nutritionistA.id, created.id);
 
     const list = await service.list(tenantA.id, patientA.id);
     expect(list.some((e) => e.id === created.id)).toBe(false);
-    await expect(service.getById(tenantA.id, created.id)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.getById(tenantA.id, created.id),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('filtra por status na listagem', async () => {
-    const created = await service.create(tenantA.id, nutritionistA.id, patientA.id, {
-      entryDate: '2026-08-09',
-      mealName: 'Para filtrar',
-    });
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      patientA.id,
+      {
+        entryDate: '2026-08-09',
+        mealName: 'Para filtrar',
+      },
+    );
     await service.review(tenantA.id, nutritionistA.id, created.id, {
       status: FoodDiaryStatus.NO_REVIEW_NEEDED,
     });
 
-    const reviewed = await service.list(tenantA.id, patientA.id, { status: FoodDiaryStatus.NO_REVIEW_NEEDED });
+    const reviewed = await service.list(tenantA.id, patientA.id, {
+      status: FoodDiaryStatus.NO_REVIEW_NEEDED,
+    });
     expect(reviewed.some((e) => e.id === created.id)).toBe(true);
 
-    const pending = await service.list(tenantA.id, patientA.id, { status: FoodDiaryStatus.PENDING_REVIEW });
+    const pending = await service.list(tenantA.id, patientA.id, {
+      status: FoodDiaryStatus.PENDING_REVIEW,
+    });
     expect(pending.some((e) => e.id === created.id)).toBe(false);
   });
 });

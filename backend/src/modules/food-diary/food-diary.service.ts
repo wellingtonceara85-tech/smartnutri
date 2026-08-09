@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
@@ -15,7 +19,13 @@ import { UpdateFoodDiaryEntryDto } from './dto/update-food-diary-entry.dto';
 const FOOD_DIARY_INCLUDE = {
   photos: { where: { deletedAt: null }, orderBy: { displayOrder: 'asc' } },
   mealPlan: { select: { id: true, title: true, version: true } },
-  meal: { select: { id: true, name: true } },
+  meal: {
+    select: {
+      id: true,
+      name: true,
+      mealPlanDay: { select: { id: true, name: true } },
+    },
+  },
   createdByUser: { select: { id: true, name: true } },
   reviewedByUser: { select: { id: true, name: true } },
 } satisfies Prisma.FoodDiaryEntryInclude;
@@ -66,7 +76,11 @@ export class FoodDiaryService {
   ) {
     await this.assertPatientInTenant(tenantId, patientId);
     if (dto.mealPlanId) {
-      await this.assertMealPlanBelongsToPatient(tenantId, dto.mealPlanId, patientId);
+      await this.assertMealPlanBelongsToPatient(
+        tenantId,
+        dto.mealPlanId,
+        patientId,
+      );
     }
     if (dto.mealId) {
       await this.assertMealBelongsToPlan(tenantId, dto.mealId, dto.mealPlanId);
@@ -101,14 +115,27 @@ export class FoodDiaryService {
     return this.withPhotoUrls(created);
   }
 
-  async update(tenantId: string, actorUserId: string, id: string, dto: UpdateFoodDiaryEntryDto) {
+  async update(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    dto: UpdateFoodDiaryEntryDto,
+  ) {
     const before = await this.findOrThrow(tenantId, id);
 
     if (dto.mealPlanId) {
-      await this.assertMealPlanBelongsToPatient(tenantId, dto.mealPlanId, before.patientId);
+      await this.assertMealPlanBelongsToPatient(
+        tenantId,
+        dto.mealPlanId,
+        before.patientId,
+      );
     }
     if (dto.mealId) {
-      await this.assertMealBelongsToPlan(tenantId, dto.mealId, dto.mealPlanId ?? before.mealPlanId ?? undefined);
+      await this.assertMealBelongsToPlan(
+        tenantId,
+        dto.mealId,
+        dto.mealPlanId ?? before.mealPlanId ?? undefined,
+      );
     }
 
     const updated = await this.prisma.foodDiaryEntry.update({
@@ -137,7 +164,12 @@ export class FoodDiaryService {
     return this.withPhotoUrls(updated);
   }
 
-  async review(tenantId: string, actorUserId: string, id: string, dto: ReviewFoodDiaryEntryDto) {
+  async review(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    dto: ReviewFoodDiaryEntryDto,
+  ) {
     if (dto.status === FoodDiaryStatus.PENDING_REVIEW) {
       throw new BadRequestException('Status de avaliação inválido');
     }
@@ -194,9 +226,17 @@ export class FoodDiaryService {
     const entry = await this.findOrThrow(tenantId, entryId);
 
     const extension =
-      file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg';
+      file.mimetype === 'image/png'
+        ? 'png'
+        : file.mimetype === 'image/webp'
+          ? 'webp'
+          : 'jpg';
     const key = `tenants/${tenantId}/patients/${entry.patientId}/food-diary/${entryId}/${Date.now()}.${extension}`;
-    await this.storage.upload({ key, body: file.buffer, contentType: file.mimetype });
+    await this.storage.upload({
+      key,
+      body: file.buffer,
+      contentType: file.mimetype,
+    });
 
     const photo = await this.prisma.foodDiaryPhoto.create({
       data: {
@@ -218,12 +258,25 @@ export class FoodDiaryService {
       after: { foodDiaryEntryId: entryId },
     });
 
-    return { ...photo, url: await this.storage.getDownloadUrl(photo.storageKey) };
+    return {
+      ...photo,
+      url: await this.storage.getDownloadUrl(photo.storageKey),
+    };
   }
 
-  async removePhoto(tenantId: string, actorUserId: string, entryId: string, photoId: string) {
+  async removePhoto(
+    tenantId: string,
+    actorUserId: string,
+    entryId: string,
+    photoId: string,
+  ) {
     const photo = await this.prisma.foodDiaryPhoto.findFirst({
-      where: { id: photoId, foodDiaryEntryId: entryId, tenantId, deletedAt: null },
+      where: {
+        id: photoId,
+        foodDiaryEntryId: entryId,
+        tenantId,
+        deletedAt: null,
+      },
     });
     if (!photo) {
       throw new NotFoundException('Foto não encontrada');
@@ -250,7 +303,9 @@ export class FoodDiaryService {
       include: FOOD_DIARY_INCLUDE,
     });
     if (!entry) {
-      throw new NotFoundException('Registro do diário alimentar não encontrado');
+      throw new NotFoundException(
+        'Registro do diário alimentar não encontrado',
+      );
     }
     return entry;
   }
@@ -274,17 +329,29 @@ export class FoodDiaryService {
       where: { id: mealPlanId, tenantId, patientId, deletedAt: null },
     });
     if (!mealPlan) {
-      throw new NotFoundException('Plano alimentar não encontrado para este paciente');
+      throw new NotFoundException(
+        'Plano alimentar não encontrado para este paciente',
+      );
     }
     return mealPlan;
   }
 
-  private async assertMealBelongsToPlan(tenantId: string, mealId: string, mealPlanId?: string) {
+  private async assertMealBelongsToPlan(
+    tenantId: string,
+    mealId: string,
+    mealPlanId?: string,
+  ) {
     const meal = await this.prisma.meal.findFirst({
-      where: { id: mealId, tenantId, mealPlanId: mealPlanId ?? undefined },
+      where: {
+        id: mealId,
+        tenantId,
+        mealPlanDay: { mealPlanId: mealPlanId ?? undefined },
+      },
     });
     if (!meal) {
-      throw new BadRequestException('Refeição informada não pertence ao plano alimentar indicado');
+      throw new BadRequestException(
+        'Refeição informada não pertence ao plano alimentar indicado',
+      );
     }
     return meal;
   }

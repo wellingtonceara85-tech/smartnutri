@@ -219,6 +219,7 @@ export function PatientFoodDiaryTab({ patientId }: { patientId: string }) {
                     {entry.mealPlan && (
                       <p className="text-xs text-muted-foreground">
                         Vinculado ao plano: {entry.mealPlan.title} (v{entry.mealPlan.version})
+                        {entry.meal?.mealPlanDay ? ` — ${entry.meal.mealPlanDay.name}` : ''}
                         {entry.meal ? ` — ${entry.meal.name}` : ''}
                       </p>
                     )}

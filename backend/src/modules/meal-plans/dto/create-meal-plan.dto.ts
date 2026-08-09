@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -10,12 +11,14 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { MealDto } from './meal.dto';
+import { MealPlanOrganizationType } from '../../../generated/prisma/client';
+import { MealPlanDayDto } from './meal-plan-day.dto';
 
 /**
  * Cria uma nova versão independente de plano — nunca sobrescreve um plano
- * existente. `meals` é opcional: um plano pode começar vazio e ser montado
- * depois pelo editor.
+ * existente. `days` é opcional: um plano pode começar vazio e ser montado
+ * depois pelo editor. Quando `organizationType` é DAILY e `days` vem vazio,
+ * o service cria automaticamente um único dia "Rotina diária".
  */
 export class CreateMealPlanDto {
   @ApiProperty()
@@ -40,6 +43,27 @@ export class CreateMealPlanDto {
   @IsOptional()
   @IsDateString()
   effectiveUntil?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: MealPlanOrganizationType,
+    default: MealPlanOrganizationType.DAILY,
+    description:
+      'DAILY (rotina diária), WEEKLY (por dia da semana) ou CUSTOM_CYCLE (dias livres).',
+  })
+  @IsOptional()
+  @IsEnum(MealPlanOrganizationType)
+  organizationType?: MealPlanOrganizationType;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Indicação livre de duração do ciclo (ex.: 7, 15) — só relevante em CUSTOM_CYCLE.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cycleLength?: number;
 
   @ApiProperty({
     required: false,
@@ -90,10 +114,10 @@ export class CreateMealPlanDto {
   @IsString()
   internalNotes?: string;
 
-  @ApiProperty({ required: false, type: [MealDto] })
+  @ApiProperty({ required: false, type: [MealPlanDayDto] })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => MealDto)
-  meals?: MealDto[];
+  @Type(() => MealPlanDayDto)
+  days?: MealPlanDayDto[];
 }

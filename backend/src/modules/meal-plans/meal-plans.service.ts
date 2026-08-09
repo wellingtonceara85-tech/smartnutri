@@ -1,25 +1,36 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   AuditAction,
+  MealPlanOrganizationType,
   MealPlanStatus,
   Prisma,
   Role,
 } from '../../generated/prisma/client';
 import { CreateMealPlanDto } from './dto/create-meal-plan.dto';
 import { MealDto } from './dto/meal.dto';
+import { MealPlanDayDto } from './dto/meal-plan-day.dto';
 import { ShareMealPlanDto } from './dto/share-meal-plan.dto';
 import { UpdateMealPlanDto } from './dto/update-meal-plan.dto';
 
 const MEAL_PLAN_INCLUDE = {
-  meals: {
+  days: {
     orderBy: { displayOrder: 'asc' },
     include: {
-      items: {
+      meals: {
         orderBy: { displayOrder: 'asc' },
         include: {
-          substitutions: { orderBy: { displayOrder: 'asc' } },
+          items: {
+            orderBy: { displayOrder: 'asc' },
+            include: {
+              substitutions: { orderBy: { displayOrder: 'asc' } },
+            },
+          },
         },
       },
     },
@@ -29,7 +40,11 @@ const MEAL_PLAN_INCLUDE = {
   updatedByUser: { select: { id: true, name: true } },
   sharedByUser: { select: { id: true, name: true } },
   appointment: {
-    select: { id: true, scheduledAt: true, appointmentType: { select: { name: true } } },
+    select: {
+      id: true,
+      scheduledAt: true,
+      appointmentType: { select: { name: true } },
+    },
   },
   treatmentCycle: { select: { id: true, cycleNumber: true } },
 } satisfies Prisma.MealPlanInclude;
@@ -74,10 +89,18 @@ export class MealPlansService {
       dto.nutritionistUserId,
     );
     if (dto.appointmentId) {
-      await this.assertAppointmentBelongsToPatient(tenantId, dto.appointmentId, patientId);
+      await this.assertAppointmentBelongsToPatient(
+        tenantId,
+        dto.appointmentId,
+        patientId,
+      );
     }
     if (dto.treatmentCycleId) {
-      await this.assertTreatmentCycleBelongsToPatient(tenantId, dto.treatmentCycleId, patientId);
+      await this.assertTreatmentCycleBelongsToPatient(
+        tenantId,
+        dto.treatmentCycleId,
+        patientId,
+      );
     }
 
     const created = await this.prisma.mealPlan.create({
@@ -91,13 +114,21 @@ export class MealPlansService {
         objective: dto.objective,
         customObjective: dto.customObjective,
         effectiveFrom: new Date(dto.effectiveFrom),
-        effectiveUntil: dto.effectiveUntil ? new Date(dto.effectiveUntil) : undefined,
+        effectiveUntil: dto.effectiveUntil
+          ? new Date(dto.effectiveUntil)
+          : undefined,
+        organizationType: dto.organizationType,
+        cycleLength: dto.cycleLength,
         generalGuidelines: dto.generalGuidelines,
         dailyWaterGoalMl: dto.dailyWaterGoalMl,
         patientVisibleNotes: dto.patientVisibleNotes,
         internalNotes: dto.internalNotes,
         createdByUserId: actorUserId,
-        meals: this.buildMealsCreateInputFromDto(tenantId, dto.meals),
+        days: this.buildDaysCreateInputFromDto(
+          tenantId,
+          dto.organizationType,
+          dto.days,
+        ),
       },
       include: MEAL_PLAN_INCLUDE,
     });
@@ -114,17 +145,36 @@ export class MealPlansService {
     return created;
   }
 
-  async update(tenantId: string, actorUserId: string, id: string, dto: UpdateMealPlanDto) {
+  async update(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    dto: UpdateMealPlanDto,
+  ) {
     const before = await this.findOrThrow(tenantId, id);
 
     if (dto.appointmentId) {
-      await this.assertAppointmentBelongsToPatient(tenantId, dto.appointmentId, before.patientId);
+      await this.assertAppointmentBelongsToPatient(
+        tenantId,
+        dto.appointmentId,
+        before.patientId,
+      );
     }
     if (dto.treatmentCycleId) {
-      await this.assertTreatmentCycleBelongsToPatient(tenantId, dto.treatmentCycleId, before.patientId);
+      await this.assertTreatmentCycleBelongsToPatient(
+        tenantId,
+        dto.treatmentCycleId,
+        before.patientId,
+      );
     }
 
-    const mealsInput = this.buildMealsCreateInputFromDto(tenantId, dto.meals);
+    const effectiveOrganizationType =
+      dto.organizationType ?? before.organizationType;
+    const daysInput = this.buildDaysCreateInputFromDto(
+      tenantId,
+      effectiveOrganizationType,
+      dto.days,
+    );
 
     await this.prisma.mealPlan.update({
       where: { id },
@@ -132,16 +182,24 @@ export class MealPlansService {
         title: dto.title,
         objective: dto.objective,
         customObjective: dto.customObjective,
-        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : undefined,
-        effectiveUntil: dto.effectiveUntil ? new Date(dto.effectiveUntil) : undefined,
+        effectiveFrom: dto.effectiveFrom
+          ? new Date(dto.effectiveFrom)
+          : undefined,
+        effectiveUntil: dto.effectiveUntil
+          ? new Date(dto.effectiveUntil)
+          : undefined,
         appointmentId: dto.appointmentId,
         treatmentCycleId: dto.treatmentCycleId,
+        organizationType: dto.organizationType,
+        cycleLength: dto.cycleLength,
         generalGuidelines: dto.generalGuidelines,
         dailyWaterGoalMl: dto.dailyWaterGoalMl,
         patientVisibleNotes: dto.patientVisibleNotes,
         internalNotes: dto.internalNotes,
         updatedByUserId: actorUserId,
-        meals: dto.meals ? { deleteMany: {}, create: mealsInput?.create } : undefined,
+        days: dto.days
+          ? { deleteMany: {}, create: daysInput?.create }
+          : undefined,
       },
     });
 
@@ -163,7 +221,9 @@ export class MealPlansService {
   async activate(tenantId: string, actorUserId: string, id: string) {
     const target = await this.findOrThrow(tenantId, id);
     if (target.status !== MealPlanStatus.DRAFT) {
-      throw new BadRequestException('Somente planos em rascunho podem ser ativados');
+      throw new BadRequestException(
+        'Somente planos em rascunho podem ser ativados',
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -180,7 +240,10 @@ export class MealPlansService {
       if (currentActive) {
         await tx.mealPlan.update({
           where: { id: currentActive.id },
-          data: { status: MealPlanStatus.REPLACED, updatedByUserId: actorUserId },
+          data: {
+            status: MealPlanStatus.REPLACED,
+            updatedByUserId: actorUserId,
+          },
         });
         await this.audit.log({
           tenantId,
@@ -216,7 +279,9 @@ export class MealPlansService {
   async complete(tenantId: string, actorUserId: string, id: string) {
     const target = await this.findOrThrow(tenantId, id);
     if (target.status !== MealPlanStatus.ACTIVE) {
-      throw new BadRequestException('Somente planos ativos podem ser concluídos');
+      throw new BadRequestException(
+        'Somente planos ativos podem ser concluídos',
+      );
     }
 
     await this.prisma.mealPlan.update({
@@ -266,7 +331,12 @@ export class MealPlansService {
     return archived;
   }
 
-  async share(tenantId: string, actorUserId: string, id: string, dto: ShareMealPlanDto) {
+  async share(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    dto: ShareMealPlanDto,
+  ) {
     const before = await this.findOrThrow(tenantId, id);
 
     const updated = await this.prisma.mealPlan.update({
@@ -312,12 +382,14 @@ export class MealPlansService {
         status: MealPlanStatus.DRAFT,
         version: 1,
         parentMealPlanId: null,
+        organizationType: original.organizationType,
+        cycleLength: original.cycleLength,
         generalGuidelines: original.generalGuidelines,
         dailyWaterGoalMl: original.dailyWaterGoalMl,
         patientVisibleNotes: original.patientVisibleNotes,
         internalNotes: original.internalNotes,
         createdByUserId: actorUserId,
-        meals: this.cloneMealsCreateInput(tenantId, original.meals),
+        days: this.cloneDaysCreateInput(tenantId, original.days),
       },
       include: MEAL_PLAN_INCLUDE,
     });
@@ -353,12 +425,14 @@ export class MealPlansService {
         status: MealPlanStatus.DRAFT,
         version: original.version + 1,
         parentMealPlanId: original.id,
+        organizationType: original.organizationType,
+        cycleLength: original.cycleLength,
         generalGuidelines: original.generalGuidelines,
         dailyWaterGoalMl: original.dailyWaterGoalMl,
         patientVisibleNotes: original.patientVisibleNotes,
         internalNotes: original.internalNotes,
         createdByUserId: actorUserId,
-        meals: this.cloneMealsCreateInput(tenantId, original.meals),
+        days: this.cloneDaysCreateInput(tenantId, original.days),
       },
       include: MEAL_PLAN_INCLUDE,
     });
@@ -376,7 +450,10 @@ export class MealPlansService {
     return created;
   }
 
-  private async findOrThrow(tenantId: string, id: string): Promise<MealPlanWithRelations> {
+  private async findOrThrow(
+    tenantId: string,
+    id: string,
+  ): Promise<MealPlanWithRelations> {
     const mealPlan = await this.prisma.mealPlan.findFirst({
       where: { id, tenantId, deletedAt: null },
       include: MEAL_PLAN_INCLUDE,
@@ -420,7 +497,9 @@ export class MealPlansService {
       where: { id: treatmentCycleId, tenantId, patientId },
     });
     if (!cycle) {
-      throw new NotFoundException('Ciclo de tratamento não encontrado para este paciente');
+      throw new NotFoundException(
+        'Ciclo de tratamento não encontrado para este paciente',
+      );
     }
     return cycle;
   }
@@ -433,25 +512,79 @@ export class MealPlansService {
     requestedNutritionistUserId?: string,
   ): Promise<string> {
     const candidateId =
-      requestedNutritionistUserId ?? (actorRole === Role.NUTRITIONIST ? actorUserId : undefined);
+      requestedNutritionistUserId ??
+      (actorRole === Role.NUTRITIONIST ? actorUserId : undefined);
     if (!candidateId) {
-      throw new BadRequestException('Informe o nutricionista responsável pelo plano');
+      throw new BadRequestException(
+        'Informe o nutricionista responsável pelo plano',
+      );
     }
 
     const membership = await this.prisma.userClinic.findUnique({
       where: { userId_tenantId: { userId: candidateId, tenantId } },
     });
-    if (!membership || !membership.isActive || membership.role !== Role.NUTRITIONIST) {
-      throw new BadRequestException('Nutricionista informado é inválido para esta clínica');
+    if (
+      !membership ||
+      !membership.isActive ||
+      membership.role !== Role.NUTRITIONIST
+    ) {
+      throw new BadRequestException(
+        'Nutricionista informado é inválido para esta clínica',
+      );
     }
 
     return candidateId;
   }
 
+  /**
+   * Se `days` vier vazio/ausente e o plano for DAILY, cria automaticamente
+   * um único dia "Rotina diária" — todo MealPlan tem pelo menos um
+   * MealPlanDay, mesmo no modo mais simples (seção 9/10 da Missão 0005.1).
+   * Para WEEKLY/CUSTOM_CYCLE sem dias informados, o plano começa vazio
+   * (o editor monta os dias depois), igual ao comportamento já existente
+   * para `meals` na Missão 0005.
+   */
+  private buildDaysCreateInputFromDto(
+    tenantId: string,
+    organizationType: MealPlanOrganizationType | undefined,
+    days?: MealPlanDayDto[],
+  ): Prisma.MealPlanDayCreateNestedManyWithoutMealPlanInput | undefined {
+    if (!days?.length) {
+      if (
+        (organizationType ?? MealPlanOrganizationType.DAILY) ===
+        MealPlanOrganizationType.DAILY
+      ) {
+        return {
+          create: [
+            {
+              tenantId,
+              name: 'Rotina diária',
+              dayNumber: 1,
+              displayOrder: 0,
+            },
+          ],
+        };
+      }
+      return undefined;
+    }
+
+    return {
+      create: days.map((day, dayIndex) => ({
+        tenantId,
+        name: day.name,
+        dayNumber: day.dayNumber,
+        weekDay: day.weekDay,
+        displayOrder: day.displayOrder ?? dayIndex,
+        notes: day.notes,
+        meals: this.buildMealsCreateInputFromDto(tenantId, day.meals),
+      })),
+    };
+  }
+
   private buildMealsCreateInputFromDto(
     tenantId: string,
     meals?: MealDto[],
-  ): Prisma.MealCreateNestedManyWithoutMealPlanInput | undefined {
+  ): Prisma.MealCreateNestedManyWithoutMealPlanDayInput | undefined {
     if (!meals?.length) return undefined;
 
     return {
@@ -492,10 +625,29 @@ export class MealPlansService {
     };
   }
 
+  private cloneDaysCreateInput(
+    tenantId: string,
+    days: MealPlanWithRelations['days'],
+  ): Prisma.MealPlanDayCreateNestedManyWithoutMealPlanInput | undefined {
+    if (!days.length) return undefined;
+
+    return {
+      create: days.map((day) => ({
+        tenantId,
+        name: day.name,
+        dayNumber: day.dayNumber,
+        weekDay: day.weekDay,
+        displayOrder: day.displayOrder,
+        notes: day.notes,
+        meals: this.cloneMealsCreateInput(tenantId, day.meals),
+      })),
+    };
+  }
+
   private cloneMealsCreateInput(
     tenantId: string,
-    meals: MealPlanWithRelations['meals'],
-  ): Prisma.MealCreateNestedManyWithoutMealPlanInput | undefined {
+    meals: MealPlanWithRelations['days'][number]['meals'],
+  ): Prisma.MealCreateNestedManyWithoutMealPlanDayInput | undefined {
     if (!meals.length) return undefined;
 
     return {
