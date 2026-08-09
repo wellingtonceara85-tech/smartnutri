@@ -776,3 +776,112 @@ export interface QueryFoodDiaryParams {
   dateFrom?: string;
   dateTo?: string;
 }
+
+// ============================================================================
+// Administração da Plataforma (Missão 0005.5)
+// ============================================================================
+
+export type TenantType = 'SOLO' | 'CLINIC';
+export type TenantStatus = 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
+
+export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
+  SOLO: 'Nutricionista independente',
+  CLINIC: 'Clínica',
+};
+
+export const TENANT_STATUS_LABELS: Record<TenantStatus, string> = {
+  TRIAL: 'Em teste',
+  ACTIVE: 'Ativo',
+  SUSPENDED: 'Suspenso',
+  CANCELLED: 'Cancelado',
+};
+
+export interface PlatformDashboard {
+  tenants: {
+    total: number;
+    active: number;
+    trial: number;
+    suspended: number;
+    cancelled: number;
+    solo: number;
+    clinic: number;
+  };
+  nutritionists: number;
+  internalUsers: number;
+  patients: number;
+}
+
+export interface PlatformTenantListItem {
+  id: string;
+  name: string;
+  type: TenantType;
+  status: TenantStatus;
+  responsibleName: string | null;
+  email: string;
+  phone: string;
+  planCode: string | null;
+  trialEndsAt: string | null;
+  userCount: number;
+  patientCount: number;
+  createdAt: string;
+}
+
+export interface PlatformTenantListResponse {
+  data: PlatformTenantListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PlatformTenantDetail extends PlatformTenantListItem {
+  usage: {
+    users: number;
+    nutritionists: number;
+    patients: number;
+    appointments: number;
+  };
+}
+
+export interface PlatformTenantUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'NUTRITIONIST' | 'RECEPTION';
+  isActive: boolean;
+  lastLoginAt: string | null;
+}
+
+export interface CreateTenantFormValues {
+  type: TenantType;
+  name: string;
+  responsibleName: string;
+  email: string;
+  phone: string;
+  planCode?: string;
+  startAsTrial?: boolean;
+}
+
+export interface CreateTenantResponse {
+  tenant: PlatformTenantDetail;
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+    temporaryPassword: string;
+  };
+}
+
+export interface UpdateTenantFormValues {
+  name?: string;
+  email?: string;
+  phone?: string;
+  planCode?: string;
+}
+
+export interface QueryPlatformTenantsParams {
+  search?: string;
+  status?: TenantStatus;
+  type?: TenantType;
+  page?: number;
+  pageSize?: number;
+}

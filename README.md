@@ -155,8 +155,49 @@ Documentação interativa completa (com schemas e exemplos) em `/api/docs` (Swag
 | Appointments | `GET/POST /appointments`, `GET /appointments/calendar`, `GET/PATCH /appointments/:id` | ADMIN, NUTRITIONIST, RECEPTION |
 | Appointments | `POST /appointments/:id/{confirm,start,complete,cancel,no-show,reschedule}` | ADMIN, NUTRITIONIST, RECEPTION (nota clínica bloqueada por campo para RECEPTION, não por rota) |
 | Appointments | `GET /patients/:patientId/appointments` | ADMIN, NUTRITIONIST, RECEPTION |
+| Platform | `GET /platform/dashboard` (indicadores agregados, nunca dado clínico) | PLATFORM_ADMIN |
+| Platform | `GET /platform/tenants`, `GET /platform/tenants/:id`, `GET /platform/tenants/:id/users` | PLATFORM_ADMIN |
+| Platform | `POST /platform/tenants` (cria cliente + usuário proprietário), `PATCH /platform/tenants/:id` | PLATFORM_ADMIN |
+| Platform | `POST /platform/tenants/:id/activate`, `POST /platform/tenants/:id/suspend` | PLATFORM_ADMIN |
 
-Toda rota tenant-scoped isola os dados pelo tenant do usuário autenticado (JWT) — nunca por parâmetro vindo do cliente. **RECEPTION não recebe `@Roles` em nenhuma rota de Evolução** — blackout completo do módulo clínico para esse perfil, decisão explícita da missão que introduziu o módulo (nem leitura). Em Appointments, RECEPTION **acessa** as rotas normalmente (a agenda é operação de recepção), mas o campo `clinicalNotes` é bloqueado na escrita (`ForbiddenException`) e omitido na leitura (`sanitizeForRole`) — restrição de campo, não de rota.
+Toda rota tenant-scoped isola os dados pelo tenant do usuário autenticado (JWT) — nunca por parâmetro vindo do cliente. **RECEPTION não recebe `@Roles` em nenhuma rota de Evolução** — blackout completo do módulo clínico para esse perfil, decisão explícita da missão que introduziu o módulo (nem leitura). Em Appointments, RECEPTION **acessa** as rotas normalmente (a agenda é operação de recepção), mas o campo `clinicalNotes` é bloqueado na escrita (`ForbiddenException`) e omitido na leitura (`sanitizeForRole`) — restrição de campo, não de rota. **Rotas `/platform/*` nunca aceitam sessão tenant-scoped** (`TenantGuard` rejeita antes do controller rodar) **e rotas tenant-scoped nunca aceitam sessão platform-scoped** (mesma checagem, sentido oposto) — os dois universos de autorização não se sobrepõem em nenhum ponto.
+
+## Perfis e autoridade (Missão 0005.5)
+
+O SmartNutri distingue duas camadas de autoridade que nunca se misturam:
+
+- **`PLATFORM_ADMIN`** — administrador do próprio SaaS SmartNutri. Não é um valor do enum `Role` (que é sempre relativo a um tenant); é o campo global `User.isPlatformAdmin`, verificado via claim explícito no JWT (`scope: 'platform'`, sem `tenantId`/`userClinicId`). Tipicamente não possui nenhum vínculo `UserClinic`. Administra clientes (tenants) da plataforma — ativa, suspende, cria — mas **nunca visualiza conteúdo clínico** (peso, plano alimentar, evolução, fotos, diário alimentar), só métricas agregadas. Entra pelo mesmo `/login`, mas cai em `/platform`, nunca em `/dashboard`.
+- **`ADMIN`** — administrador de **um** cliente/tenant (clínica ou nutricionista independente). É o `Role.ADMIN` de sempre, sem mudança nesta missão. Administra usuários e configurações do próprio tenant, nunca acessa outro tenant nem a área `/platform`. Já possuía (antes desta missão) acesso a todas as rotas clínicas necessárias — não foi preciso conceder nada novo para o cenário "nutricionista independente com um único usuário" funcionar.
+- **`NUTRITIONIST`** — profissional clínico dentro de um tenant.
+- **`RECEPTION`** — equipe administrativa de um tenant, com blackout dos módulos clínicos (Evolução, Plano Alimentar, Diário Alimentar).
+- **`PATIENT`** — **ainda não existe** como identidade interna. Não é (e não será) um valor do `Role` de tenant. Terá autenticação própria no futuro **Portal do Paciente** (Missão 0007), fora desta árvore de perfis internos.
+
+### Acesso ao Platform Admin
+
+Não existe tela de login separada para o dono da plataforma. O acesso é pela **mesma tela `/login` de sempre**: o backend identifica `User.isPlatformAdmin = true` no momento da autenticação e decide o destino — ninguém escolhe "entrar como plataforma", e não há seletor de tenant nessa tela.
+
+- E-mail e senha comuns → `POST /auth/login` → backend não encontra `isPlatformAdmin` → sessão `scope: 'tenant'` de sempre → `/dashboard`.
+- E-mail de um Platform Admin → backend emite sessão `scope: 'platform'` (sem `tenantId`/`userClinicId`) → frontend redireciona automaticamente para `/platform`. Essa decisão é sempre do backend (`/auth/login` e `/auth/me` retornam `isPlatformAdmin`); o frontend só lê esse campo para escolher a rota — nenhuma rota `/platform` depende de esconder um link, todas são protegidas por `PlatformAdminGuard` no backend.
+
+**Provisionar um novo Platform Admin** (produção, homologação ou local — script manual, não faz parte de build/seed/deploy):
+
+```bash
+cd backend
+# com DATABASE_URL do ambiente-alvo carregado no shell
+npx tsx scripts/manage-platform-admin.ts grant --email pessoa@exemplo.com
+```
+
+- Se o e-mail já existe como usuário, só promove (`isPlatformAdmin = true`) — a senha existente não é alterada.
+- Se não existe, cria a conta com uma senha temporária aleatória, exibida **uma única vez** no terminal (nunca gravada em log ou arquivo). Quem receber deve guardá-la num gerenciador de senhas.
+- A conta nunca ganha `UserClinic`, nunca recebe `tenantId`, e nunca tem acesso a rotas clínicas — só `/platform/*`, verificado pelo backend.
+
+**Revogar** o privilégio global (sem apagar a conta):
+
+```bash
+npx tsx scripts/manage-platform-admin.ts revoke --email pessoa@exemplo.com
+```
+
+O e-mail de demonstração `platformadmin@smartnutri.local` (senha `Demo@123456`) existe **só no seed de desenvolvimento local** — `prisma/seed.ts` se recusa a rodar se detectar `APP_ENV=staging`, `NODE_ENV=production` ou uma `DATABASE_URL` da Neon, então não há risco de essas credenciais de demonstração serem criadas em homologação/produção.
 
 ## Decisões técnicas relevantes (Etapa 2)
 
@@ -227,12 +268,14 @@ Cobrem: validação de CPF/telefone, normalização, duplicidade de CPF/nome por
 
 ## Status
 
-**Etapa 1 (Fundação), Etapa 2 (Pacientes e Planos), Missão 0003 (Identidade profissional + Evolução corporal), Missão 0003.1 (Refinamento da análise segmentar), Missão 0004 (Agenda, consultas e fluxo clínico) e Missão 0004.5 (Homologação, deploy e infraestrutura cloud) concluídas.**
+**Etapa 1 (Fundação), Etapa 2 (Pacientes e Planos), Missão 0003 (Identidade profissional + Evolução corporal), Missão 0003.1 (Refinamento da análise segmentar), Missão 0004 (Agenda, consultas e fluxo clínico), Missão 0004.5 (Homologação, deploy e infraestrutura cloud), Missão 0005 (Plano Alimentar e Diário Alimentar), Missão 0005.1 (Rotina diária, plano semanal e ciclos personalizados) e Missão 0005.5 (Administração da plataforma) concluídas.**
 
 - Etapa 1: autenticação completa (login, refresh com rotação, logout, `/me`), RBAC no backend, isolamento por clínica (tenant), modelo de dados completo no Prisma, shell protegido no frontend, seed de demonstração.
 - Etapa 2: CRUD completo de Pacientes (listagem com busca/filtros/paginação, cadastro, edição, perfil com abas, arquivamento) e Planos (listagem, cadastro/edição em modal, ativação/inativação), com RBAC granular por ação, validação de CPF/telefone, auditoria e testes automatizados.
 - Missão 0003: produto renomeado para SmartNutri (sem nome de clínica fixo em lugar nenhum da UI); identidade profissional completa (nome, foto, CRN, contato, paleta de cores aplicada em tempo real) com página própria (`/perfil`); módulo de evolução corporal completo (antropometria, bioimpedância, análise segmentar, fotos com storage seguro via MinIO, comparação entre avaliações com pontos percentuais, gráficos reutilizáveis, mapa corporal SVG original em 3 variantes, relatório de impressão); RECEPTION com blackout total do módulo clínico; base pronta para o futuro Portal do Paciente sem implementá-lo ainda.
 
 - Missão 0004.5: ambiente de homologação público (ver seção "Ambiente de Homologação" acima) — frontend na Vercel, backend em Firebase Cloud Functions, banco na Neon, storage no Cloudflare R2. Sessão cross-domain corrigida (cookie de refresh com `Path=/` e `SameSite=None`), Swagger protegido por Basic Auth em staging, política de limpeza automática de imagens de container configurada.
+- Missão 0005 / 0005.1: Plano Alimentar (refeições, itens, substituições, versionamento, duplicação, impressão) e Diário Alimentar completos; evolução para suportar rotina diária, plano semanal e ciclos personalizados via `MealPlanDay`, preservando 100% dos planos anteriores à migração.
+- Missão 0005.5: autoridade global `PLATFORM_ADMIN` (ver seção "Perfis e autoridade" acima), separada do RBAC de tenant por design — claim `scope: 'platform'` no JWT, nunca um valor do `Role` nem bypass de tenant. Área `/platform` (visão geral, clientes, detalhe de cliente com ativar/suspender) sem impersonação e sem visibilidade de dado clínico. Ciclo de vida de tenant (`TRIAL`/`ACTIVE`/`SUSPENDED`/`CANCELLED`) — suspender nunca apaga dados, só bloqueia login com mensagem amigável. Tenant ganhou `type` (`SOLO`/`CLINIC`), preparando comercialização futura sem billing ainda.
 
-Próximas etapas (ciclos, agenda, financeiro, dashboard/relatórios, qualidade) seguem o plano de entrega incremental do projeto.
+Próximas etapas (financeiro, dashboard/relatórios, Portal do Paciente, qualidade) seguem o plano de entrega incremental do projeto.

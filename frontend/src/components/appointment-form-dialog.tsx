@@ -13,7 +13,7 @@ import { createAppointment, listAppointmentTypes } from '@/lib/api/appointments'
 import { getPatient, listPatients } from '@/lib/api/patients';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import { localDateTimeToUtcIso, todayLocalDateKey } from '@/lib/appointment-datetime';
 import { maskPhone } from '@/lib/masks';
 import { APPOINTMENT_MODALITY_LABELS, type AppointmentModality, type AppointmentType } from '@/lib/types';
@@ -75,7 +75,7 @@ function AppointmentFormBody({
   defaultNutritionistUserId,
   onCreated,
 }: Omit<AppointmentFormDialogProps, 'open'>) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const queryClient = useQueryClient();
 
   const lockedPatientQuery = useQuery({

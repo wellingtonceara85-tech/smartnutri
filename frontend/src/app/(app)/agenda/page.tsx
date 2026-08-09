@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { listAppointments } from '@/lib/api/appointments';
 import { listNutritionists } from '@/lib/api/users';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import {
   addDaysToDateKey,
   daysInMonth,
@@ -54,7 +54,7 @@ export default function AgendaPage() {
 }
 
 function AgendaPageContent() {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const searchParams = useSearchParams();
 
   const [view, setView] = useState<ViewMode>('day');

@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type { StringValue } from 'ms';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { TenantStatus } from '../../generated/prisma/client';
 
 interface IssuedTokens {
   accessToken: string;
@@ -12,18 +13,28 @@ interface IssuedTokens {
   tokenId: string;
 }
 
-interface TokenPair {
+export interface TenantUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  tenantId: string;
+  tenantName: string;
+  isPlatformAdmin: false;
+}
+
+export interface PlatformUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  isPlatformAdmin: true;
+}
+
+export interface TokenPair {
   accessToken: string;
   refreshToken: string;
   refreshTokenExpiresAt: Date;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    tenantId: string;
-    tenantName: string;
-  };
+  user: TenantUserSummary | PlatformUserSummary;
 }
 
 interface RequestMeta {
@@ -32,6 +43,10 @@ interface RequestMeta {
 }
 
 const REFRESH_TOKEN_BYTES = 48;
+
+/** Mensagem amigável — nunca stack trace — quando o tenant está suspenso/cancelado (Missão 0005.5). */
+const TENANT_SUSPENDED_MESSAGE =
+  'Seu acesso ao SmartNutri está temporariamente suspenso. Entre em contato com o suporte.';
 
 function parseDurationToMs(duration: string): number {
   const match = /^(\d+)([smhd])$/.exec(duration.trim());
@@ -80,24 +95,38 @@ export class AuthService {
       throw new UnauthorizedException('E-mail ou senha inválidos');
     }
 
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    if (user.isPlatformAdmin) {
+      const tokens = await this.issueTokenPair(user.id, meta);
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          isPlatformAdmin: true,
+        },
+      };
+    }
+
     const membership = user.userClinics[0];
     if (!membership) {
       throw new UnauthorizedException(
         'Usuário sem vínculo ativo com nenhuma clínica',
       );
     }
+    this.assertTenantOperational(membership.tenant.status);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+    const tokens = await this.issueTokenPair(user.id, meta, {
+      tenantId: membership.tenantId,
+      userClinicId: membership.id,
     });
-
-    const tokens = await this.issueTokenPair(
-      user.id,
-      membership.tenantId,
-      membership.id,
-      meta,
-    );
 
     return {
       accessToken: tokens.accessToken,
@@ -110,6 +139,7 @@ export class AuthService {
         role: membership.role,
         tenantId: membership.tenantId,
         tenantName: membership.tenant.name,
+        isPlatformAdmin: false,
       },
     };
   }
@@ -158,17 +188,42 @@ export class AuthService {
     }
 
     const user = storedToken.user;
-    const membership = user.userClinics[0];
-    if (!user.isActive || user.deletedAt || !membership) {
+    if (!user.isActive || user.deletedAt) {
       throw new UnauthorizedException('Acesso revogado');
     }
 
-    const tokens = await this.issueTokenPair(
-      user.id,
-      membership.tenantId,
-      membership.id,
-      meta,
-    );
+    let tokens: IssuedTokens;
+    let responseUser: TenantUserSummary | PlatformUserSummary;
+
+    if (user.isPlatformAdmin) {
+      tokens = await this.issueTokenPair(user.id, meta);
+      responseUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        isPlatformAdmin: true,
+      };
+    } else {
+      const membership = user.userClinics[0];
+      if (!membership) {
+        throw new UnauthorizedException('Acesso revogado');
+      }
+      this.assertTenantOperational(membership.tenant.status);
+
+      tokens = await this.issueTokenPair(user.id, meta, {
+        tenantId: membership.tenantId,
+        userClinicId: membership.id,
+      });
+      responseUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: membership.role,
+        tenantId: membership.tenantId,
+        tenantName: membership.tenant.name,
+        isPlatformAdmin: false,
+      };
+    }
 
     await this.prisma.refreshToken.update({
       where: { id: storedToken.id },
@@ -179,14 +234,7 @@ export class AuthService {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: membership.role,
-        tenantId: membership.tenantId,
-        tenantName: membership.tenant.name,
-      },
+      user: responseUser,
     };
   }
 
@@ -209,6 +257,7 @@ export class AuthService {
         name: true,
         email: true,
         phone: true,
+        isPlatformAdmin: true,
         userClinics: {
           where: { isActive: true },
           select: {
@@ -227,19 +276,40 @@ export class AuthService {
     return user;
   }
 
+  /** Sem stack trace — mensagem amigável para o usuário final (Missão 0005.5). */
+  private assertTenantOperational(status: TenantStatus): void {
+    if (
+      status === TenantStatus.SUSPENDED ||
+      status === TenantStatus.CANCELLED
+    ) {
+      throw new UnauthorizedException(TENANT_SUSPENDED_MESSAGE);
+    }
+  }
+
+  /**
+   * Emite o par de tokens. Sem `tenantContext`, o access token é
+   * platform-scoped (`scope: 'platform'`, sem tenantId/userClinicId) — só
+   * usado para `User.isPlatformAdmin === true`. Com `tenantContext`, mantém
+   * o formato tenant-scoped de sempre.
+   */
   private async issueTokenPair(
     userId: string,
-    tenantId: string,
-    userClinicId: string,
     meta: RequestMeta,
+    tenantContext?: { tenantId: string; userClinicId: string },
   ): Promise<IssuedTokens> {
-    const accessToken = await this.jwtService.signAsync(
-      { sub: userId, tenantId, userClinicId },
-      {
-        secret: process.env.JWT_ACCESS_SECRET,
-        expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN ?? '15m') as StringValue,
-      },
-    );
+    const payload = tenantContext
+      ? {
+          sub: userId,
+          scope: 'tenant' as const,
+          tenantId: tenantContext.tenantId,
+          userClinicId: tenantContext.userClinicId,
+        }
+      : { sub: userId, scope: 'platform' as const };
+
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: process.env.JWT_ACCESS_SECRET,
+      expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN ?? '15m') as StringValue,
+    });
 
     const refreshSecret = crypto
       .randomBytes(REFRESH_TOKEN_BYTES)

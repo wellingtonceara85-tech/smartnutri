@@ -17,24 +17,55 @@ datasource db {
 // Identidade / Tenant
 // ==========================================================================
 
+/// Nutricionista independente (1 profissional) ou clínica/equipe com múltiplos profissionais — Missão 0005.5.
+enum TenantType {
+  SOLO
+  CLINIC
+}
+
+/**
+ * Ciclo de vida comercial do tenant (Missão 0005.5). Ainda sem billing —
+ * transições são feitas manualmente pelo Platform Admin. SUSPENDED/
+ * CANCELLED nunca apagam dados; apenas bloqueiam login (ver
+ * JwtStrategy.validate()).
+ */
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
 model Tenant {
-  id                         String    @id @default(uuid())
+  id                         String  @id @default(uuid())
   name                       String
-  slug                       String    @unique
+  slug                       String  @unique
   cnpj                       String?
   email                      String
   phone                      String
-  timezone                   String    @default("America/Sao_Paulo")
+  timezone                   String  @default("America/Sao_Paulo")
   addressLine                String?
   city                       String?
   state                      String?
   cancellationPolicyText     String?
   cancellationMinHoursNotice Int?
   receiptNumberPrefix        String?
-  receiptNumberNextSeq       Int       @default(1)
-  createdAt                  DateTime  @default(now())
-  updatedAt                  DateTime  @updatedAt
-  deletedAt                  DateTime?
+  receiptNumberNextSeq       Int     @default(1)
+
+  /// Preparação para onboarding/comercialização (Missão 0005.5) — sem billing real ainda.
+  type          TenantType   @default(CLINIC)
+  status        TenantStatus @default(ACTIVE)
+  /// Código livre de plano/licença (ex.: "trial", "starter") — sem catálogo formal ainda, preparação para módulo comercial futuro.
+  planCode      String?
+  trialStartsAt DateTime?
+  trialEndsAt   DateTime?
+  activatedAt   DateTime?
+  suspendedAt   DateTime?
+  cancelledAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   userClinics                    UserClinic[]
   patients                       Patient[]
@@ -82,29 +113,38 @@ model User {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  userClinics             UserClinic[]
-  refreshTokens           RefreshToken[]
-  createdCycles           TreatmentCycle[]           @relation("CycleCreatedBy")
-  appointmentsAsNutri     Appointment[]              @relation("AppointmentNutritionist")
-  createdAppointments     Appointment[]              @relation("AppointmentCreatedBy")
-  updatedAppointments     Appointment[]              @relation("AppointmentUpdatedBy")
-  statusChanges           AppointmentStatusHistory[]
-  createdPayments         Payment[]                  @relation("PaymentCreatedBy")
-  createdRefunds          Refund[]                   @relation("RefundCreatedBy")
-  createdEvolutions       PatientEvolution[]         @relation("EvolutionCreatedBy")
-  updatedEvolutions       PatientEvolution[]         @relation("EvolutionUpdatedBy")
-  nutritionistEvolutions  PatientEvolution[]         @relation("EvolutionNutritionist")
-  sharedEvolutions        PatientEvolution[]         @relation("EvolutionSharedBy")
-  uploadedDocuments       Document[]                 @relation("DocumentUploadedBy")
-  uploadedEvolutionPhotos EvolutionPhoto[]           @relation("EvolutionPhotoUploadedBy")
-  auditLogEntries         AuditLog[]
-  patientsAsResponsible   Patient[]                  @relation("PatientResponsibleNutritionist")
-  professionalProfiles    ProfessionalProfile[]
-  mealPlansAsNutritionist MealPlan[]                 @relation("MealPlanNutritionist")
-  createdMealPlans        MealPlan[]                 @relation("MealPlanCreatedBy")
-  updatedMealPlans        MealPlan[]                 @relation("MealPlanUpdatedBy")
-  sharedMealPlans         MealPlan[]                 @relation("MealPlanSharedBy")
-  createdFoodDiaryEntries FoodDiaryEntry[]            @relation("FoodDiaryCreatedBy")
+  /**
+   * Autoridade global do SaaS (Missão 0005.5) — nunca um valor do enum
+   * `Role`, que é sempre relativo a um `UserClinic` (um tenant). Um
+   * platform admin tipicamente não possui nenhuma linha em `userClinics`;
+   * verificado explicitamente via claim `scope: 'platform'` no JWT, nunca
+   * inferido a partir de outro campo.
+   */
+  isPlatformAdmin Boolean @default(false)
+
+  userClinics              UserClinic[]
+  refreshTokens            RefreshToken[]
+  createdCycles            TreatmentCycle[]           @relation("CycleCreatedBy")
+  appointmentsAsNutri      Appointment[]              @relation("AppointmentNutritionist")
+  createdAppointments      Appointment[]              @relation("AppointmentCreatedBy")
+  updatedAppointments      Appointment[]              @relation("AppointmentUpdatedBy")
+  statusChanges            AppointmentStatusHistory[]
+  createdPayments          Payment[]                  @relation("PaymentCreatedBy")
+  createdRefunds           Refund[]                   @relation("RefundCreatedBy")
+  createdEvolutions        PatientEvolution[]         @relation("EvolutionCreatedBy")
+  updatedEvolutions        PatientEvolution[]         @relation("EvolutionUpdatedBy")
+  nutritionistEvolutions   PatientEvolution[]         @relation("EvolutionNutritionist")
+  sharedEvolutions         PatientEvolution[]         @relation("EvolutionSharedBy")
+  uploadedDocuments        Document[]                 @relation("DocumentUploadedBy")
+  uploadedEvolutionPhotos  EvolutionPhoto[]           @relation("EvolutionPhotoUploadedBy")
+  auditLogEntries          AuditLog[]
+  patientsAsResponsible    Patient[]                  @relation("PatientResponsibleNutritionist")
+  professionalProfiles     ProfessionalProfile[]
+  mealPlansAsNutritionist  MealPlan[]                 @relation("MealPlanNutritionist")
+  createdMealPlans         MealPlan[]                 @relation("MealPlanCreatedBy")
+  updatedMealPlans         MealPlan[]                 @relation("MealPlanUpdatedBy")
+  sharedMealPlans          MealPlan[]                 @relation("MealPlanSharedBy")
+  createdFoodDiaryEntries  FoodDiaryEntry[]           @relation("FoodDiaryCreatedBy")
   reviewedFoodDiaryEntries FoodDiaryEntry[]           @relation("FoodDiaryReviewedBy")
 }
 
@@ -958,7 +998,7 @@ enum WeekDay {
  * como REPLACED dentro da mesma transação (nunca apaga).
  */
 model MealPlan {
-  id                 String         @id @default(uuid())
+  id                 String  @id @default(uuid())
   tenantId           String
   patientId          String
   nutritionistUserId String
@@ -998,16 +1038,16 @@ model MealPlan {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  patient          Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  nutritionistUser User            @relation("MealPlanNutritionist", fields: [nutritionistUserId], references: [id])
-  appointment      Appointment?    @relation(fields: [appointmentId], references: [id])
-  treatmentCycle   TreatmentCycle? @relation(fields: [treatmentCycleId], references: [id])
-  parentMealPlan   MealPlan?       @relation("MealPlanVersion", fields: [parentMealPlanId], references: [id])
-  childVersions    MealPlan[]      @relation("MealPlanVersion")
-  createdByUser    User            @relation("MealPlanCreatedBy", fields: [createdByUserId], references: [id])
-  updatedByUser    User?           @relation("MealPlanUpdatedBy", fields: [updatedByUserId], references: [id])
-  sharedByUser     User?           @relation("MealPlanSharedBy", fields: [sharedByUserId], references: [id])
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patient          Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  nutritionistUser User             @relation("MealPlanNutritionist", fields: [nutritionistUserId], references: [id])
+  appointment      Appointment?     @relation(fields: [appointmentId], references: [id])
+  treatmentCycle   TreatmentCycle?  @relation(fields: [treatmentCycleId], references: [id])
+  parentMealPlan   MealPlan?        @relation("MealPlanVersion", fields: [parentMealPlanId], references: [id])
+  childVersions    MealPlan[]       @relation("MealPlanVersion")
+  createdByUser    User             @relation("MealPlanCreatedBy", fields: [createdByUserId], references: [id])
+  updatedByUser    User?            @relation("MealPlanUpdatedBy", fields: [updatedByUserId], references: [id])
+  sharedByUser     User?            @relation("MealPlanSharedBy", fields: [sharedByUserId], references: [id])
   days             MealPlanDay[]
   foodDiaryEntries FoodDiaryEntry[]
 
@@ -1124,7 +1164,7 @@ enum FoodDiaryStatus {
  * diretamente do paciente (sem usuário profissional autor).
  */
 model FoodDiaryEntry {
-  id        String  @id @default(uuid())
+  id        String @id @default(uuid())
   tenantId  String
   patientId String
 

@@ -21,7 +21,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
-  const { login, status } = useAuth();
+  const { login, status, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -32,14 +32,20 @@ export function LoginForm() {
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      router.replace('/dashboard');
+    if (status === 'authenticated' && user) {
+      // Admin da plataforma nunca cai no dashboard clínico comum (Missão 0005.5) —
+      // nunca há seletor de tenant aqui, a rota é decidida só pelo tipo de sessão.
+      router.replace(user.isPlatformAdmin ? '/platform' : '/dashboard');
     }
-  }, [status, router]);
+  }, [status, user, router]);
 
   async function onSubmit(values: LoginFormValues) {
     try {
-      await login(values.email, values.password);
+      const loggedInUser = await login(values.email, values.password);
+      if (loggedInUser.isPlatformAdmin) {
+        router.replace('/platform');
+        return;
+      }
       const from = searchParams.get('from');
       router.replace(from && from !== '/login' ? from : '/dashboard');
     } catch (error) {

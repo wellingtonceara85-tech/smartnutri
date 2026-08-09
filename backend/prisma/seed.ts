@@ -52,12 +52,43 @@ async function upsertPlan(
   return prisma.plan.create({ data: { ...data, tenantId } });
 }
 
+/**
+ * Trava de segurança: este seed cria contas de demonstração com senha
+ * fixa (DEMO_PASSWORD) e nunca deve rodar contra homologação/produção.
+ * Verifica tanto variáveis de ambiente explícitas quanto o próprio host da
+ * connection string, para não depender só de alguém lembrar de configurar
+ * APP_ENV corretamente antes de rodar `prisma db seed` na máquina errada.
+ */
+function assertSeedIsSafeToRun(): void {
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  const looksLikeStagingOrProd =
+    process.env.APP_ENV === 'staging' ||
+    process.env.NODE_ENV === 'production' ||
+    databaseUrl.includes('neon.tech');
+
+  if (looksLikeStagingOrProd) {
+    throw new Error(
+      'Seed de demonstração bloqueado: o ambiente atual parece ser homologação/produção ' +
+        '(APP_ENV, NODE_ENV ou DATABASE_URL indicam isso). Este script só pode rodar contra ' +
+        'um banco de desenvolvimento local.',
+    );
+  }
+}
+
 async function main() {
+  assertSeedIsSafeToRun();
+
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, BCRYPT_ROUNDS);
 
+  // Cliente CLINIC (Missão 0005.5) — equipe com múltiplos profissionais;
+  // reaproveita o tenant demo já existente em vez de criar outro.
   const tenant = await prisma.tenant.upsert({
     where: { slug: 'clinica-demo' },
-    update: {},
+    update: {
+      type: 'CLINIC',
+      status: 'ACTIVE',
+      activatedAt: new Date('2026-08-03'),
+    },
     create: {
       name: 'Ambiente demo SmartNutri',
       slug: 'clinica-demo',
@@ -70,6 +101,9 @@ async function main() {
         'Cancelamentos devem ser avisados com pelo menos 24h de antecedência.',
       cancellationMinHoursNotice: 24,
       receiptNumberPrefix: 'REC',
+      type: 'CLINIC',
+      status: 'ACTIVE',
+      activatedAt: new Date('2026-08-03'),
     },
   });
 
@@ -128,6 +162,81 @@ async function main() {
       create: { userId: user.id, tenantId: tenant.id, role: demoUser.role },
     });
   }
+
+  // ------------------------------------------------------------------------
+  // Administração da plataforma (Missão 0005.5) — autoridade global do
+  // SaaS, sem UserClinic nenhuma: nunca pertence operacionalmente a um
+  // tenant. Ver auth-request.ts / jwt.strategy.ts para o porquê.
+  await prisma.user.upsert({
+    where: { email: 'platformadmin@smartnutri.local' },
+    update: { isPlatformAdmin: true },
+    create: {
+      name: 'Admin da Plataforma SmartNutri',
+      email: 'platformadmin@smartnutri.local',
+      passwordHash,
+      isPlatformAdmin: true,
+    },
+  });
+
+  // ------------------------------------------------------------------------
+  // Cliente SOLO (Missão 0005.5) — nutricionista independente com um único
+  // usuário, que precisa conseguir administrar o próprio ambiente e
+  // trabalhar clinicamente sem um segundo login (seção 30 da missão).
+  const soloTenant = await prisma.tenant.upsert({
+    where: { slug: 'mariana-solo' },
+    update: {
+      type: 'SOLO',
+      status: 'ACTIVE',
+      activatedAt: new Date('2026-08-05'),
+    },
+    create: {
+      name: 'Mariana Nutricionista',
+      slug: 'mariana-solo',
+      email: 'mariana@nutricionistademo.com.br',
+      phone: '(21) 97000-1234',
+      type: 'SOLO',
+      status: 'ACTIVE',
+      activatedAt: new Date('2026-08-05'),
+    },
+  });
+
+  const marianaUser = await prisma.user.upsert({
+    where: { email: 'mariana@nutricionistademo.com.br' },
+    update: {},
+    create: {
+      name: 'Mariana Nutricionista',
+      email: 'mariana@nutricionistademo.com.br',
+      passwordHash,
+    },
+  });
+
+  await prisma.userClinic.upsert({
+    where: {
+      userId_tenantId: { userId: marianaUser.id, tenantId: soloTenant.id },
+    },
+    update: {},
+    create: {
+      userId: marianaUser.id,
+      tenantId: soloTenant.id,
+      role: Role.ADMIN,
+    },
+  });
+
+  await prisma.professionalProfile.upsert({
+    where: { tenantId: soloTenant.id },
+    update: {},
+    create: {
+      tenantId: soloTenant.id,
+      userId: marianaUser.id,
+      displayName: 'Mariana Nutricionista',
+      professionalName: 'Mariana Nutricionista',
+      professionalTitle: 'Nutricionista',
+      crnNumber: '54321',
+      crnState: 'RJ',
+      specialty: 'Nutrição esportiva',
+      email: 'mariana@nutricionistademo.com.br',
+    },
+  });
 
   const nutritionistUserId = userIdByEmail.get(
     'nutricionista@clinicademo.com.br',
@@ -448,10 +557,13 @@ async function main() {
         effectiveFrom: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
         status: 'REPLACED',
         version: 1,
-        generalGuidelines: 'Beber pelo menos 2 litros de água por dia. Evitar frituras.',
+        generalGuidelines:
+          'Beber pelo menos 2 litros de água por dia. Evitar frituras.',
         dailyWaterGoalMl: 2000,
-        patientVisibleNotes: 'Vamos com calma — o objetivo é criar hábitos que durem.',
-        internalNotes: 'Paciente relatou resistência a laticínios — evitar leite integral.',
+        patientVisibleNotes:
+          'Vamos com calma — o objetivo é criar hábitos que durem.',
+        internalNotes:
+          'Paciente relatou resistência a laticínios — evitar leite integral.',
         days: {
           create: [
             {
@@ -475,7 +587,15 @@ async function main() {
                           unit: 'fatias',
                           displayOrder: 0,
                           substitutions: {
-                            create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                            create: [
+                              {
+                                tenantId: tenant.id,
+                                description: 'Tapioca',
+                                quantity: 2,
+                                unit: 'colheres de sopa',
+                                displayOrder: 0,
+                              },
+                            ],
                           },
                         },
                         {
@@ -510,7 +630,15 @@ async function main() {
                           householdMeasure: '1 filé médio',
                           displayOrder: 1,
                           substitutions: {
-                            create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                            create: [
+                              {
+                                tenantId: tenant.id,
+                                description: 'Peixe grelhado',
+                                quantity: 150,
+                                unit: 'g',
+                                displayOrder: 0,
+                              },
+                            ],
                           },
                         },
                       ],
@@ -537,10 +665,13 @@ async function main() {
         status: 'ACTIVE',
         version: 2,
         parentMealPlanId: mealPlanV1.id,
-        generalGuidelines: 'Beber pelo menos 2,5 litros de água por dia. Evitar frituras e ultraprocessados.',
+        generalGuidelines:
+          'Beber pelo menos 2,5 litros de água por dia. Evitar frituras e ultraprocessados.',
         dailyWaterGoalMl: 2500,
-        patientVisibleNotes: 'Ótima evolução! Ajustamos as porções do almoço para o novo objetivo.',
-        internalNotes: 'Paciente relatou resistência a laticínios — evitar leite integral.',
+        patientVisibleNotes:
+          'Ótima evolução! Ajustamos as porções do almoço para o novo objetivo.',
+        internalNotes:
+          'Paciente relatou resistência a laticínios — evitar leite integral.',
         days: {
           create: [
             {
@@ -564,7 +695,15 @@ async function main() {
                           unit: 'fatias',
                           displayOrder: 0,
                           substitutions: {
-                            create: [{ tenantId: tenant.id, description: 'Tapioca', quantity: 2, unit: 'colheres de sopa', displayOrder: 0 }],
+                            create: [
+                              {
+                                tenantId: tenant.id,
+                                description: 'Tapioca',
+                                quantity: 2,
+                                unit: 'colheres de sopa',
+                                displayOrder: 0,
+                              },
+                            ],
                           },
                         },
                         {
@@ -606,7 +745,15 @@ async function main() {
                           householdMeasure: '1 filé médio',
                           displayOrder: 1,
                           substitutions: {
-                            create: [{ tenantId: tenant.id, description: 'Peixe grelhado', quantity: 150, unit: 'g', displayOrder: 0 }],
+                            create: [
+                              {
+                                tenantId: tenant.id,
+                                description: 'Peixe grelhado',
+                                quantity: 150,
+                                unit: 'g',
+                                displayOrder: 0,
+                              },
+                            ],
                           },
                         },
                         {
@@ -660,7 +807,8 @@ async function main() {
         createdByUserId: nutritionistUserId,
         reviewedByUserId: nutritionistUserId,
         reviewedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        nutritionistFeedback: 'Ótima escolha! Continue variando as proteínas dessa forma.',
+        nutritionistFeedback:
+          'Ótima escolha! Continue variando as proteínas dessa forma.',
       },
     });
 
@@ -709,7 +857,8 @@ async function main() {
         effectiveFrom: new Date(),
         status: 'DRAFT',
         organizationType: 'WEEKLY',
-        generalGuidelines: 'Priorizar proteína magra em todas as refeições principais.',
+        generalGuidelines:
+          'Priorizar proteína magra em todas as refeições principais.',
         dailyWaterGoalMl: 3000,
         days: {
           create: [
@@ -728,8 +877,20 @@ async function main() {
                     displayOrder: 0,
                     items: {
                       create: [
-                        { tenantId: tenant.id, description: 'Ovos mexidos', quantity: 3, unit: 'unidades', displayOrder: 0 },
-                        { tenantId: tenant.id, description: 'Aveia em flocos', quantity: 3, unit: 'colheres de sopa', displayOrder: 1 },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Ovos mexidos',
+                          quantity: 3,
+                          unit: 'unidades',
+                          displayOrder: 0,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Aveia em flocos',
+                          quantity: 3,
+                          unit: 'colheres de sopa',
+                          displayOrder: 1,
+                        },
                       ],
                     },
                   },
@@ -740,15 +901,33 @@ async function main() {
                     displayOrder: 1,
                     items: {
                       create: [
-                        { tenantId: tenant.id, description: 'Arroz branco', quantity: 5, unit: 'colheres de sopa', displayOrder: 0 },
-                        { tenantId: tenant.id, description: 'Patinho moído', quantity: 150, unit: 'g', displayOrder: 1 },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Arroz branco',
+                          quantity: 5,
+                          unit: 'colheres de sopa',
+                          displayOrder: 0,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Patinho moído',
+                          quantity: 150,
+                          unit: 'g',
+                          displayOrder: 1,
+                        },
                       ],
                     },
                   },
                 ],
               },
             },
-            { tenantId: tenant.id, name: 'Terça-feira', weekDay: 'TUESDAY', dayNumber: 2, displayOrder: 1 },
+            {
+              tenantId: tenant.id,
+              name: 'Terça-feira',
+              weekDay: 'TUESDAY',
+              dayNumber: 2,
+              displayOrder: 1,
+            },
             {
               tenantId: tenant.id,
               name: 'Quarta-feira',
@@ -763,7 +942,15 @@ async function main() {
                     scheduledTime: '07:00',
                     displayOrder: 0,
                     items: {
-                      create: [{ tenantId: tenant.id, description: 'Vitamina de banana com whey', quantity: 1, unit: 'copo', displayOrder: 0 }],
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Vitamina de banana com whey',
+                          quantity: 1,
+                          unit: 'copo',
+                          displayOrder: 0,
+                        },
+                      ],
                     },
                   },
                   {
@@ -773,18 +960,54 @@ async function main() {
                     displayOrder: 1,
                     items: {
                       create: [
-                        { tenantId: tenant.id, description: 'Batata-doce', quantity: 200, unit: 'g', displayOrder: 0 },
-                        { tenantId: tenant.id, description: 'Filé de tilápia', quantity: 150, unit: 'g', displayOrder: 1 },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Batata-doce',
+                          quantity: 200,
+                          unit: 'g',
+                          displayOrder: 0,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Filé de tilápia',
+                          quantity: 150,
+                          unit: 'g',
+                          displayOrder: 1,
+                        },
                       ],
                     },
                   },
                 ],
               },
             },
-            { tenantId: tenant.id, name: 'Quinta-feira', weekDay: 'THURSDAY', dayNumber: 4, displayOrder: 3 },
-            { tenantId: tenant.id, name: 'Sexta-feira', weekDay: 'FRIDAY', dayNumber: 5, displayOrder: 4 },
-            { tenantId: tenant.id, name: 'Sábado', weekDay: 'SATURDAY', dayNumber: 6, displayOrder: 5 },
-            { tenantId: tenant.id, name: 'Domingo', weekDay: 'SUNDAY', dayNumber: 7, displayOrder: 6 },
+            {
+              tenantId: tenant.id,
+              name: 'Quinta-feira',
+              weekDay: 'THURSDAY',
+              dayNumber: 4,
+              displayOrder: 3,
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Sexta-feira',
+              weekDay: 'FRIDAY',
+              dayNumber: 5,
+              displayOrder: 4,
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Sábado',
+              weekDay: 'SATURDAY',
+              dayNumber: 6,
+              displayOrder: 5,
+            },
+            {
+              tenantId: tenant.id,
+              name: 'Domingo',
+              weekDay: 'SUNDAY',
+              dayNumber: 7,
+              displayOrder: 6,
+            },
           ],
         },
       },
@@ -805,7 +1028,8 @@ async function main() {
         status: 'DRAFT',
         organizationType: 'CUSTOM_CYCLE',
         cycleLength: 2,
-        generalGuidelines: 'Alternar os dois dias conforme a agenda de treinos da semana.',
+        generalGuidelines:
+          'Alternar os dois dias conforme a agenda de treinos da semana.',
         days: {
           create: [
             {
@@ -821,7 +1045,15 @@ async function main() {
                     timeDescription: '1h antes do treino',
                     displayOrder: 0,
                     items: {
-                      create: [{ tenantId: tenant.id, description: 'Banana com aveia', quantity: 1, unit: 'porção', displayOrder: 0 }],
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Banana com aveia',
+                          quantity: 1,
+                          unit: 'porção',
+                          displayOrder: 0,
+                        },
+                      ],
                     },
                   },
                   {
@@ -830,7 +1062,15 @@ async function main() {
                     timeDescription: 'Logo após o treino',
                     displayOrder: 1,
                     items: {
-                      create: [{ tenantId: tenant.id, description: 'Whey protein com água', quantity: 1, unit: 'dose', displayOrder: 0 }],
+                      create: [
+                        {
+                          tenantId: tenant.id,
+                          description: 'Whey protein com água',
+                          quantity: 1,
+                          unit: 'dose',
+                          displayOrder: 0,
+                        },
+                      ],
                     },
                   },
                 ],
@@ -850,8 +1090,20 @@ async function main() {
                     displayOrder: 0,
                     items: {
                       create: [
-                        { tenantId: tenant.id, description: 'Arroz integral', quantity: 3, unit: 'colheres de sopa', displayOrder: 0 },
-                        { tenantId: tenant.id, description: 'Grão-de-bico', quantity: 4, unit: 'colheres de sopa', displayOrder: 1 },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Arroz integral',
+                          quantity: 3,
+                          unit: 'colheres de sopa',
+                          displayOrder: 0,
+                        },
+                        {
+                          tenantId: tenant.id,
+                          description: 'Grão-de-bico',
+                          quantity: 4,
+                          unit: 'colheres de sopa',
+                          displayOrder: 1,
+                        },
                       ],
                     },
                   },
@@ -985,7 +1237,8 @@ async function main() {
         location: 'Consultório 1',
         status: AppointmentStatus.DONE,
         completedAt: atHour(-10, 15, 30),
-        clinicalNotes: 'Paciente relatou dificuldade com refeições fora de casa.',
+        clinicalNotes:
+          'Paciente relatou dificuldade com refeições fora de casa.',
       },
       {
         patientId: danielaId,

@@ -21,7 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { createMealPlan, updateMealPlan } from '@/lib/api/meal-plans';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import {
   MEAL_PLAN_ORGANIZATION_TYPE_LABELS,
@@ -158,7 +158,7 @@ interface MealPlanEditorProps {
 }
 
 export function MealPlanEditor({ mode, patientId, mealPlan, appointmentId }: MealPlanEditorProps) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 

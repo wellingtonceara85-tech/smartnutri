@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { createPatient, updatePatient, updatePatientStatus } from '@/lib/api/patients';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import { BRAZILIAN_STATES } from '@/lib/brazilian-states';
 import { isValidCpf } from '@/lib/cpf';
 import { maskCep, maskCpf, maskPhone } from '@/lib/masks';
@@ -88,7 +88,7 @@ interface PatientFormProps {
 }
 
 export function PatientForm({ mode, patient }: PatientFormProps) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const router = useRouter();
 
   const nutritionistsQuery = useQuery({
@@ -119,6 +119,13 @@ export function PatientForm({ mode, patient }: PatientFormProps) {
       responsibleNutritionistId: values.responsibleNutritionistId === NONE_VALUE ? undefined : values.responsibleNutritionistId,
     };
     delete (payload as Record<string, unknown>).status;
+    // Campos opcionais vazios viram '' pelo react-hook-form, mas o backend
+    // rejeita '' em campos com validador de formato (ex.: @IsEmail) mesmo com @IsOptional.
+    for (const key of Object.keys(payload) as (keyof typeof payload)[]) {
+      if (payload[key] === '') {
+        (payload as Record<string, unknown>)[key] = undefined;
+      }
+    }
 
     try {
       if (mode === 'create') {

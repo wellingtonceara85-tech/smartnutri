@@ -44,4 +44,19 @@ describe('CreatePatientDto', () => {
     });
     expect(errors.some((e) => e.property === 'email')).toBe(true);
   });
+
+  it('aceita paciente sem e-mail (campo omitido)', async () => {
+    const errors = await validateDto({
+      fullName: 'Maria da Silva',
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejeita e-mail como string vazia — @IsOptional não cobre "", o payload deve omitir o campo', async () => {
+    const errors = await validateDto({
+      fullName: 'Maria da Silva',
+      email: '',
+    });
+    expect(errors.some((e) => e.property === 'email')).toBe(true);
+  });
 });

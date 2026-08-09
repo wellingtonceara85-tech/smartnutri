@@ -12,8 +12,8 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import type { CookieOptions, Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import type { AuthenticatedUser } from '../../common/types/auth-request';
+import { PlatformRoute } from '../../common/decorators/platform-route.decorator';
+import type { AuthenticatedRequest } from '../../common/types/auth-request';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 
@@ -90,9 +90,16 @@ export class AuthController {
     return { success: true };
   }
 
+  /**
+   * Respondida tanto por sessão tenant-scoped quanto platform-scoped
+   * (Missão 0005.5) — por isso `@PlatformRoute()` e leitura direta de
+   * `req.user`, em vez do `@CurrentUser()` de sempre, que assume formato
+   * tenant-scoped.
+   */
+  @PlatformRoute()
   @Get('me')
-  async me(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.me(user.userId);
+  async me(@Req() req: AuthenticatedRequest) {
+    return this.authService.me(req.user.userId);
   }
 
   private setRefreshCookie(res: Response, token: string, expiresAt: Date) {

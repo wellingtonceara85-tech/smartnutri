@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PlanFormDialog } from '@/components/plan-form-dialog';
 import { listPlans, updatePlanStatus } from '@/lib/api/plans';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import type { Plan } from '@/lib/types';
 
 function currencyFormat(value: string) {
@@ -28,7 +28,7 @@ function currencyFormat(value: string) {
 }
 
 export default function PlanosPage() {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === 'ADMIN';
 

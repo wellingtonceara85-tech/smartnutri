@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { createEvolution, updateEvolution } from '@/lib/api/evolutions';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import {
   ANTHROPOMETRY_FIELDS,
   BIOIMPEDANCE_COMPOSITION_FIELDS,
@@ -229,7 +229,7 @@ export function EvolutionForm({
   defaultAssessmentDate,
   defaultNutritionistUserId,
 }: EvolutionFormProps) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const router = useRouter();
 
   const nutritionistsQuery = useQuery({

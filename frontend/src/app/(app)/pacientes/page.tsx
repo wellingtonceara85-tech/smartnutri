@@ -31,14 +31,14 @@ import { PatientStatusBadge } from '@/components/patient-status-badge';
 import { archivePatient, listPatients } from '@/lib/api/patients';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import { buildWhatsAppLink, maskPhone } from '@/lib/masks';
 import { PATIENT_STATUS_LABELS, type PatientStatus } from '@/lib/types';
 
 const PAGE_SIZE = 20;
 
 export default function PacientesPage() {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');

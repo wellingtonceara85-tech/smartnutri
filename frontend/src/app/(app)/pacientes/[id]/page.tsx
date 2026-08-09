@@ -17,7 +17,7 @@ import { PatientStatusBadge } from '@/components/patient-status-badge';
 import { listPatientAppointments } from '@/lib/api/appointments';
 import { getPatient } from '@/lib/api/patients';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import { formatAppointmentDateTime } from '@/lib/appointment-datetime';
 import { buildWhatsAppLink, formatAge, maskPhone } from '@/lib/masks';
 import { GENDER_LABELS } from '@/lib/types';
@@ -48,7 +48,7 @@ function initials(name: string) {
 
 export default function PacienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const canSeeEvolution = user?.role === 'ADMIN' || user?.role === 'NUTRITIONIST';
 
   const patientQuery = useQuery({

@@ -23,7 +23,7 @@ import {
 } from '@/lib/api/appointments';
 import { getProfessionalProfile } from '@/lib/api/professional-profile';
 import { ApiError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useTenantAuth } from '@/lib/auth-context';
 import {
   addDaysToDateKey,
   formatAppointmentDate,
@@ -47,7 +47,7 @@ interface AppointmentDetailDialogProps {
 }
 
 export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: AppointmentDetailDialogProps) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user } = useTenantAuth();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<ActionMode>('view');
   const [busy, setBusy] = useState(false);

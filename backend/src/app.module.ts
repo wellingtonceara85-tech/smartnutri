@@ -19,6 +19,7 @@ import { EvolutionsModule } from './modules/evolutions/evolutions.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { MealPlansModule } from './modules/meal-plans/meal-plans.module';
 import { FoodDiaryModule } from './modules/food-diary/food-diary.module';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { FoodDiaryModule } from './modules/food-diary/food-diary.module';
     AppointmentsModule,
     MealPlansModule,
     FoodDiaryModule,
+    PlatformModule,
   ],
   controllers: [AppController],
   providers: [

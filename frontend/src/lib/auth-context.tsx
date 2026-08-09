@@ -5,14 +5,26 @@ import { apiFetch } from './api-client';
 
 export type UserRole = 'ADMIN' | 'NUTRITIONIST' | 'RECEPTION';
 
-export interface AuthUser {
+/** Sessão de um usuário de tenant (clínica/nutricionista independente) — o caso comum. */
+export interface TenantAuthUser {
   id: string;
   name: string;
   email: string;
   role: UserRole;
   tenantId: string;
   tenantName: string;
+  isPlatformAdmin: false;
 }
+
+/** Sessão do administrador da plataforma (Missão 0005.5) — sem tenant. */
+export interface PlatformAuthUser {
+  id: string;
+  name: string;
+  email: string;
+  isPlatformAdmin: true;
+}
+
+export type AuthUser = TenantAuthUser | PlatformAuthUser;
 
 interface LoginResponse {
   accessToken: string;
@@ -25,7 +37,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   accessToken: string | null;
   status: AuthStatus;
-  login: (email: string, password: string) => Promise<void>;
+  /** Retorna o usuário autenticado — o caller decide para onde navegar (tenant vs. platform admin). */
+  login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
 
@@ -83,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(data.accessToken);
     setSessionMarker(true);
     setStatus('authenticated');
+    return data.user;
   }, []);
 
   const logout = useCallback(async () => {
@@ -105,4 +119,22 @@ export function useAuth() {
     throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   }
   return ctx;
+}
+
+/**
+ * Para uso nas páginas/componentes clínicos de sempre (dentro do route
+ * group `(app)`), que sempre leram `user.role`/`user.tenantId` direto. O
+ * cast é seguro porque `AppShell` já redireciona qualquer sessão
+ * platform-scoped para `/platform` antes de qualquer filho de `(app)`
+ * renderizar — nunca usar este hook fora desse route group.
+ */
+export function useTenantAuth() {
+  const ctx = useAuth();
+  return { ...ctx, user: ctx.user as TenantAuthUser | null };
+}
+
+/** Para uso nas páginas `/platform/*` — nunca fora do route group `(platform)`. */
+export function usePlatformAuth() {
+  const ctx = useAuth();
+  return { ...ctx, user: ctx.user as PlatformAuthUser | null };
 }

@@ -26,7 +26,14 @@ export class RolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
-    if (!user || !requiredRoles.includes(user.role)) {
+    // Sessão platform-scoped nunca satisfaz @Roles(...) — são universos de
+    // autorização separados (ver TenantGuard/PlatformAdminGuard). Na prática
+    // TenantGuard já barra isso antes; esta checagem é só defensiva.
+    if (
+      !user ||
+      user.scope !== 'tenant' ||
+      !requiredRoles.includes(user.role)
+    ) {
       throw new ForbiddenException(
         'Seu perfil não tem permissão para esta ação',
       );
