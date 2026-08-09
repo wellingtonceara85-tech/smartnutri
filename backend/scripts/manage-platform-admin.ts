@@ -1,11 +1,13 @@
 /**
- * Provisiona ou revoga o privilégio global de PLATFORM_ADMIN (Missão 0005.5).
+ * Provisiona, revoga ou gira a credencial do privilégio global de
+ * PLATFORM_ADMIN (Missão 0005.5).
  *
  * Uso (a partir de `backend/`, com as variáveis de ambiente do banco-alvo
  * já carregadas no shell — DATABASE_URL apontando para local/staging/prod):
  *
  *   npx tsx scripts/manage-platform-admin.ts grant --email pessoa@exemplo.com
  *   npx tsx scripts/manage-platform-admin.ts revoke --email pessoa@exemplo.com
+ *   npx tsx scripts/manage-platform-admin.ts reset-password --email pessoa@exemplo.com [--password "senha escolhida"]
  *
  * `grant`:
  *   - Se o e-mail já existe como User, apenas promove (isPlatformAdmin = true),
@@ -20,6 +22,19 @@
  *   - Define isPlatformAdmin = false. Nunca apaga o usuário nem qualquer
  *     outro dado (mesma filosofia de "suspender não é apagar" já usada
  *     para Tenant nesta missão).
+ *
+ * `reset-password`:
+ *   - Exige que o e-mail já exista E já seja PLATFORM_ADMIN (não é uma
+ *     ferramenta genérica de reset de senha de qualquer usuário — troca de
+ *     senha de usuário de tenant é fora de escopo desta missão, fica para
+ *     uma futura "Conta e Segurança").
+ *   - Nunca altera tenantId, nunca cria UserClinic, nunca toca
+ *     isPlatformAdmin — só substitui passwordHash.
+ *   - Sem `--password`, gera uma senha forte aleatória e imprime no
+ *     terminal UMA ÚNICA VEZ (mesmo padrão do `grant`). Com `--password`,
+ *     usa a senha fornecida e não a reimprime (quem forneceu já a conhece).
+ *     Em ambos os casos só o hash bcrypt é persistido — a senha em texto
+ *     puro nunca é logada em arquivo.
  *
  * Este script é de uso manual e administrativo — não faz parte de nenhum
  * fluxo automático de build, seed ou deploy.
@@ -36,20 +51,28 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
-function parseArgs(): { command: string; email: string } {
-  const [command, ...rest] = process.argv.slice(2);
-  const emailFlagIndex = rest.indexOf('--email');
-  const email = emailFlagIndex >= 0 ? rest[emailFlagIndex + 1] : undefined;
+const COMMANDS = ['grant', 'revoke', 'reset-password'] as const;
+type Command = (typeof COMMANDS)[number];
 
-  if (command !== 'grant' && command !== 'revoke') {
+function readFlag(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+function parseArgs(): { command: Command; email: string; password?: string } {
+  const [command, ...rest] = process.argv.slice(2);
+  const email = readFlag(rest, '--email');
+  const password = readFlag(rest, '--password');
+
+  if (!COMMANDS.includes(command as Command)) {
     throw new Error(
-      'Uso: npx tsx scripts/manage-platform-admin.ts <grant|revoke> --email pessoa@exemplo.com',
+      'Uso: npx tsx scripts/manage-platform-admin.ts <grant|revoke|reset-password> --email pessoa@exemplo.com [--password "senha escolhida"]',
     );
   }
   if (!email || !email.includes('@')) {
     throw new Error('Informe um e-mail válido com --email pessoa@exemplo.com');
   }
-  return { command, email: email.toLowerCase() };
+  return { command: command as Command, email: email.toLowerCase(), password };
 }
 
 function generateTemporaryPassword(): string {
@@ -114,12 +137,47 @@ async function revoke(email: string): Promise<void> {
   );
 }
 
+async function resetPassword(email: string, providedPassword?: string): Promise<void> {
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (!existing) {
+    throw new Error(`Nenhum usuário encontrado com o e-mail "${email}".`);
+  }
+  if (!existing.isPlatformAdmin) {
+    throw new Error(
+      `"${email}" não é PLATFORM_ADMIN — este comando não altera senha de usuário de tenant.`,
+    );
+  }
+
+  const newPassword = providedPassword ?? generateTemporaryPassword();
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  // Só passwordHash muda — tenantId (inexistente para platform admin),
+  // UserClinic e isPlatformAdmin permanecem exatamente como estavam.
+  await prisma.user.update({
+    where: { id: existing.id },
+    data: { passwordHash },
+  });
+
+  console.log(`Senha de "${email}" redefinida. A senha anterior parou de funcionar.`);
+  if (!providedPassword) {
+    console.log('');
+    console.log('Nova senha (exibida uma única vez — copie agora):');
+    console.log(`  ${newPassword}`);
+    console.log('');
+    console.log(
+      'Guarde-a em um gerenciador de senhas. Ela não fica registrada em nenhum log ou arquivo.',
+    );
+  }
+}
+
 async function main() {
-  const { command, email } = parseArgs();
+  const { command, email, password } = parseArgs();
   if (command === 'grant') {
     await grant(email);
-  } else {
+  } else if (command === 'revoke') {
     await revoke(email);
+  } else {
+    await resetPassword(email, password);
   }
 }
 
