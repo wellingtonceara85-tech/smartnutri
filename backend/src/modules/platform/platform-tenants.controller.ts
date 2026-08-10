@@ -14,6 +14,7 @@ import { CurrentPlatformUser } from '../../common/decorators/current-platform-us
 import { PlatformRoute } from '../../common/decorators/platform-route.decorator';
 import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard';
 import type { PlatformAuthenticatedUser } from '../../common/types/auth-request';
+import { ChangeTenantPlanDto } from './dto/change-tenant-plan.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { QueryPlatformTenantsDto } from './dto/query-platform-tenants.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -58,6 +59,15 @@ export class PlatformTenantsController {
     @Body() dto: UpdateTenantDto,
   ) {
     return this.platformService.updateTenant(id, admin.userId, dto);
+  }
+
+  @Patch(':id/plan')
+  changePlan(
+    @CurrentPlatformUser() admin: PlatformAuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTenantPlanDto,
+  ) {
+    return this.platformService.changeTenantPlan(id, admin.userId, dto);
   }
 
   @Post(':id/activate')

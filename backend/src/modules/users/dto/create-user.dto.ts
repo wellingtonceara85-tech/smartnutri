@@ -17,10 +17,15 @@ export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ description: 'Senha temporária definida pelo administrador' })
+  @ApiProperty({
+    required: false,
+    description:
+      'Senha temporária — se omitida, o backend gera uma automaticamente e a devolve uma única vez na resposta (Missão 0005.7)',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  password: string;
+  password?: string;
 
   @ApiProperty({ enum: Role })
   @IsEnum(Role)

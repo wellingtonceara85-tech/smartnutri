@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../../common/audit/audit.module';
 import { UsersModule } from '../users/users.module';
 import { PlatformDashboardController } from './platform-dashboard.controller';
+import { PlatformPlansController } from './platform-plans.controller';
 import { PlatformTenantsController } from './platform-tenants.controller';
 import { PlatformUsersController } from './platform-users.controller';
 import { PlatformUsersService } from './platform-users.service';
@@ -13,6 +14,7 @@ import { PlatformService } from './platform.service';
     PlatformDashboardController,
     PlatformTenantsController,
     PlatformUsersController,
+    PlatformPlansController,
   ],
   providers: [PlatformService, PlatformUsersService],
 })

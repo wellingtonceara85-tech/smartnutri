@@ -239,7 +239,7 @@ describe('Platform Users (e2e)', () => {
     );
   });
 
-  it('impede criar um segundo usuário em tenant SOLO', async () => {
+  it('impede criar um segundo usuário em tenant SOLO (limite do plano)', async () => {
     const res = await request(app.getHttpServer())
       .post('/platform/users')
       .set('Authorization', `Bearer ${platformAdminToken}`)
@@ -247,11 +247,30 @@ describe('Platform Users (e2e)', () => {
         tenantId: tenantSolo.id,
         name: 'Segundo Usuario Solo',
         email: `segundo-solo-platusr-novo-${runId}@teste.com`,
+        role: 'ADMIN',
+      })
+      .expect(409);
+
+    expect((res.body as ErrorResponseBody).message).toMatch(
+      /permite até 1 usuário/i,
+    );
+  });
+
+  it('impede atribuir perfil fora dos permitidos pelo plano (SOLO só aceita ADMIN)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/platform/users')
+      .set('Authorization', `Bearer ${platformAdminToken}`)
+      .send({
+        tenantId: tenantSolo.id,
+        name: 'Nutricionista Indevido Solo',
+        email: `role-indevido-solo-platusr-novo-${runId}@teste.com`,
         role: 'NUTRITIONIST',
       })
       .expect(409);
 
-    expect((res.body as ErrorResponseBody).message).toMatch(/SOLO/i);
+    expect((res.body as ErrorResponseBody).message).toMatch(
+      /não permite o perfil/i,
+    );
   });
 
   it('redefine senha — a antiga deixa de autenticar e a nova autentica', async () => {

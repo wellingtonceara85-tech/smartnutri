@@ -803,6 +803,28 @@ export const TENANT_STATUS_LABELS: Record<TenantStatus, string> = {
   CANCELLED: 'Cancelado',
 };
 
+// ----------------------------------------------------------------------
+// Catálogo de planos (Missão 0005.7) — o backend é a fonte única; o
+// frontend só tipa a resposta de GET /platform/plans, nunca hardcoda os
+// limites/nomes de cada plano.
+// ----------------------------------------------------------------------
+
+export type PlanCode =
+  | 'SOLO'
+  | 'CLINIC_ESSENTIAL'
+  | 'CLINIC_PRO'
+  | 'CLINIC_PLUS'
+  | 'DEMO_INTERNAL';
+
+export interface PlanDefinition {
+  code: PlanCode;
+  displayName: string;
+  tenantType: TenantType;
+  maxUsers: number;
+  allowedRoles: PlatformRole[];
+  isInternal: boolean;
+}
+
 export interface PlatformDashboard {
   tenants: {
     total: number;
@@ -826,7 +848,7 @@ export interface PlatformTenantListItem {
   responsibleName: string | null;
   email: string;
   phone: string;
-  planCode: string | null;
+  planCode: PlanCode | null;
   trialEndsAt: string | null;
   userCount: number;
   patientCount: number;
@@ -841,8 +863,15 @@ export interface PlatformTenantListResponse {
 }
 
 export interface PlatformTenantDetail extends PlatformTenantListItem {
+  plan: {
+    code: PlanCode;
+    displayName: string;
+    maxUsers: number;
+    isInternal: boolean;
+  };
   usage: {
     users: number;
+    maxUsers: number;
     nutritionists: number;
     patients: number;
     appointments: number;
@@ -864,7 +893,7 @@ export interface CreateTenantFormValues {
   responsibleName: string;
   email: string;
   phone: string;
-  planCode?: string;
+  planCode: PlanCode;
   startAsTrial?: boolean;
 }
 
@@ -882,7 +911,10 @@ export interface UpdateTenantFormValues {
   name?: string;
   email?: string;
   phone?: string;
-  planCode?: string;
+}
+
+export interface ChangeTenantPlanFormValues {
+  planCode: PlanCode;
 }
 
 export interface QueryPlatformTenantsParams {
@@ -945,4 +977,52 @@ export interface QueryPlatformUsersParams {
   tenantStatus?: TenantStatus;
   page?: number;
   pageSize?: number;
+}
+
+// ============================================================================
+// Equipe e Acessos (Missão 0005.7) — gestão da própria equipe pelo ADMIN
+// do tenant, em /usuarios. Formato reflete o retorno "cru" do Prisma
+// (UserClinic + user aninhado), diferente do formato achatado usado pelo
+// Platform Admin em /platform/usuarios.
+// ============================================================================
+
+export interface TeamMember {
+  id: string; // UserClinic.id
+  userId: string;
+  tenantId: string;
+  role: PlatformRole;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    isActive: boolean;
+    lastLoginAt: string | null;
+  };
+}
+
+export interface TeamUsage {
+  planCode: PlanCode;
+  planDisplayName: string;
+  maxUsers: number;
+  usedUsers: number;
+  allowedRoles: PlatformRole[];
+}
+
+export interface CreateTeamMemberFormValues {
+  name: string;
+  email: string;
+  role: PlatformRole;
+  phone?: string;
+}
+
+export interface CreateTeamMemberResponse extends TeamMember {
+  temporaryPassword?: string;
+}
+
+export interface ResetTeamMemberPasswordResponse {
+  temporaryPassword: string;
 }

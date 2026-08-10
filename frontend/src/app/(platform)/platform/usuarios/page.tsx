@@ -78,7 +78,7 @@ export default function PlatformUsuariosPage() {
         </div>
         <Button nativeButton={false} render={<Link href="/platform/usuarios/novo" />}>
           <Plus className="size-4" />
-          Novo usuário
+          Adicionar usuário
         </Button>
       </div>
 

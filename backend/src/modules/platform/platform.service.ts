@@ -6,6 +6,10 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuditService } from '../../common/audit/audit.service';
+import {
+  PLAN_CATALOG,
+  resolvePlanForTenant,
+} from '../../common/plans/plan-catalog';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   AuditAction,
@@ -15,6 +19,7 @@ import {
   TenantStatus,
   TenantType,
 } from '../../generated/prisma/client';
+import { ChangeTenantPlanDto } from './dto/change-tenant-plan.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { QueryPlatformTenantsDto } from './dto/query-platform-tenants.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -150,10 +155,19 @@ export class PlatformService {
         }),
       ]);
 
+    const plan = resolvePlanForTenant(tenant);
+
     return {
       ...this.toTenantListItem(tenant),
+      plan: {
+        code: plan.code,
+        displayName: plan.displayName,
+        maxUsers: plan.maxUsers,
+        isInternal: plan.isInternal,
+      },
       usage: {
         users: userCount,
+        maxUsers: plan.maxUsers,
         nutritionists: nutritionistCount,
         patients: patientCount,
         appointments: appointmentCount,
@@ -193,6 +207,12 @@ export class PlatformService {
 
   /** Cria o cliente e seu usuário proprietário (ADMIN do tenant) de forma transacional (seção 21). */
   async createTenant(actorUserId: string, dto: CreateTenantDto) {
+    const plan = PLAN_CATALOG[dto.planCode];
+    if (plan.isInternal || plan.tenantType !== dto.type) {
+      throw new ConflictException(
+        `O plano "${plan.displayName}" não é compatível com o tipo de cliente selecionado.`,
+      );
+    }
     await this.assertEmailAvailable(dto.email);
     const slug = await this.buildUniqueSlug(dto.name);
     const temporaryPassword = this.generateTemporaryPassword();
@@ -280,7 +300,6 @@ export class PlatformService {
         name: dto.name,
         email: dto.email?.toLowerCase(),
         phone: dto.phone,
-        planCode: dto.planCode,
       },
     });
 
@@ -292,6 +311,54 @@ export class PlatformService {
       action: AuditAction.UPDATE,
       before: this.toAuditJson(before),
       after: this.toAuditJson(updated),
+    });
+
+    return this.getTenantById(tenantId);
+  }
+
+  /**
+   * Troca de plano (Missão 0005.7, seção 14). Nunca suspende/remove
+   * usuário automaticamente — se a equipe atual não cabe no plano novo,
+   * a troca é bloqueada até o próprio cliente reduzir a equipe.
+   */
+  async changeTenantPlan(
+    tenantId: string,
+    actorUserId: string,
+    dto: ChangeTenantPlanDto,
+  ) {
+    const tenant = await this.assertTenantExists(tenantId);
+    const currentPlan = resolvePlanForTenant(tenant);
+    const newPlan = PLAN_CATALOG[dto.planCode];
+
+    if (newPlan.tenantType !== tenant.type) {
+      throw new ConflictException(
+        `O plano "${newPlan.displayName}" não é compatível com o tipo deste cliente.`,
+      );
+    }
+
+    const activeUsers = await this.prisma.userClinic.count({
+      where: { tenantId, isActive: true },
+    });
+    if (activeUsers > newPlan.maxUsers) {
+      throw new ConflictException(
+        `Este cliente possui ${activeUsers} usuários ativos. O plano "${newPlan.displayName}" permite até ${newPlan.maxUsers}. Reduza a equipe antes de concluir a alteração.`,
+      );
+    }
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { planCode: dto.planCode },
+    });
+
+    await this.audit.log({
+      tenantId,
+      actorUserId,
+      entityType: 'Tenant',
+      entityId: tenantId,
+      action: AuditAction.UPDATE,
+      before: { planCode: currentPlan.code },
+      after: { planCode: newPlan.code },
+      metadata: { changeType: 'PLAN_CHANGE' },
     });
 
     return this.getTenantById(tenantId);

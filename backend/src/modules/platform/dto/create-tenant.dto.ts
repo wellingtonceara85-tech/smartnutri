@@ -3,11 +3,13 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
 import { TenantType } from '../../../generated/prisma/client';
+import { PLAN_CODES, type PlanCode } from '../../../common/plans/plan-catalog';
 
 /**
  * Cria um novo cliente (tenant) e seu usuário proprietário, de forma
@@ -48,13 +50,12 @@ export class CreateTenantDto {
   phone: string;
 
   @ApiProperty({
-    required: false,
+    enum: PLAN_CODES,
     description:
-      'Código livre de plano/licença (ex.: "trial", "starter") — sem catálogo formal ainda',
+      'Plano contratado — precisa ser compatível com `type` (validado no serviço); planos internos (ex.: DEMO_INTERNAL) não são aceitos aqui.',
   })
-  @IsOptional()
-  @IsString()
-  planCode?: string;
+  @IsIn(PLAN_CODES)
+  planCode: PlanCode;
 
   @ApiProperty({
     required: false,

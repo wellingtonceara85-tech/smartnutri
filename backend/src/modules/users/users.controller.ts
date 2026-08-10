@@ -30,10 +30,20 @@ export class UsersController {
     return this.usersService.listForTenant(tenantId);
   }
 
+  @Get('usage')
+  @Roles(Role.ADMIN)
+  usage(@CurrentTenant() tenantId: string) {
+    return this.usersService.getUsage(tenantId);
+  }
+
   @Post()
   @Roles(Role.ADMIN)
-  create(@CurrentTenant() tenantId: string, @Body() dto: CreateUserDto) {
-    return this.usersService.createForTenant(tenantId, dto);
+  create(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: CreateUserDto,
+  ) {
+    return this.usersService.createForTenant(tenantId, dto, currentUser.userId);
   }
 
   @Get('nutritionists')
@@ -69,15 +79,55 @@ export class UsersController {
   @Roles(Role.ADMIN)
   updateRole(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
     @Param('id') id: string,
     @Body() dto: UpdateRoleDto,
   ) {
-    return this.usersService.updateRole(tenantId, id, dto.role);
+    return this.usersService.updateRole(
+      tenantId,
+      id,
+      dto.role,
+      currentUser.userId,
+    );
+  }
+
+  @Post(':id/reset-password')
+  @Roles(Role.ADMIN)
+  resetPassword(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.usersService
+      .resetPasswordForTenant(tenantId, id, currentUser.userId)
+      .then((temporaryPassword) => ({ temporaryPassword }));
+  }
+
+  @Post(':id/activate')
+  @Roles(Role.ADMIN)
+  activate(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.usersService.activateForTenant(
+      tenantId,
+      id,
+      currentUser.userId,
+    );
   }
 
   @Delete(':id')
   @Roles(Role.ADMIN)
-  deactivate(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.usersService.deactivateForTenant(tenantId, id);
+  deactivate(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.usersService.deactivateForTenant(
+      tenantId,
+      id,
+      currentUser.userId,
+    );
   }
 }

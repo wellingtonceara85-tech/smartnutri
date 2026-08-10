@@ -1,9 +1,11 @@
 import { apiFetch } from '../api-client';
 import type {
+  ChangeTenantPlanFormValues,
   CreatePlatformUserFormValues,
   CreatePlatformUserResponse,
   CreateTenantFormValues,
   CreateTenantResponse,
+  PlanDefinition,
   PlatformDashboard,
   PlatformTenantDetail,
   PlatformTenantListResponse,
@@ -29,6 +31,18 @@ function buildQueryString(query: object): string {
 
 export function getPlatformDashboard(accessToken: string) {
   return apiFetch<PlatformDashboard>('/platform/dashboard', { accessToken });
+}
+
+export function listPlatformPlans(accessToken: string) {
+  return apiFetch<PlanDefinition[]>('/platform/plans', { accessToken });
+}
+
+export function changeTenantPlan(accessToken: string, id: string, data: ChangeTenantPlanFormValues) {
+  return apiFetch<PlatformTenantDetail>(`/platform/tenants/${id}/plan`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(data),
+  });
 }
 
 export function listPlatformTenants(accessToken: string, query: QueryPlatformTenantsParams = {}) {

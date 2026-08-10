@@ -310,6 +310,7 @@ describe('Platform Admin (e2e)', () => {
         .set('Authorization', `Bearer ${platformAdminToken}`)
         .send({
           type: 'SOLO',
+          planCode: 'SOLO',
           name: `Nutri Solo Teste ${runId}`,
           responsibleName: 'Nutri Solo Teste',
           email: `nutri-solo-${runId}@teste.com`,
@@ -335,6 +336,7 @@ describe('Platform Admin (e2e)', () => {
         .set('Authorization', `Bearer ${platformAdminToken}`)
         .send({
           type: 'CLINIC',
+          planCode: 'CLINIC_ESSENTIAL',
           name: `Clínica Teste ${runId}`,
           responsibleName: 'Responsável Clínica',
           email: `clinica-${runId}@teste.com`,
@@ -351,6 +353,7 @@ describe('Platform Admin (e2e)', () => {
         .set('Authorization', `Bearer ${tenantTokens.admin}`)
         .send({
           type: 'SOLO',
+          planCode: 'SOLO',
           name: 'Tentativa indevida',
           responsibleName: 'Tentativa',
           email: `tentativa-${runId}@teste.com`,

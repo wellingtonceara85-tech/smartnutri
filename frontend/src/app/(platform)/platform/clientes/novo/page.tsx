@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,10 +17,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createPlatformTenant } from '@/lib/api/platform';
+import { createPlatformTenant, listPlatformPlans } from '@/lib/api/platform';
 import { ApiError } from '@/lib/api-client';
 import { usePlatformAuth } from '@/lib/auth-context';
-import type { TenantType } from '@/lib/types';
+import type { PlanCode, TenantType } from '@/lib/types';
 
 const TYPE_OPTIONS: { value: TenantType; label: string; description: string }[] = [
   { value: 'SOLO', label: 'Nutricionista independente', description: 'Um único usuário administra e atende sozinho.' },
@@ -36,7 +37,7 @@ export default function NovoClientePage() {
   const [responsibleName, setResponsibleName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [planCode, setPlanCode] = useState('');
+  const [planCode, setPlanCode] = useState<PlanCode | ''>('');
   const [startAsTrial, setStartAsTrial] = useState(false);
 
   const [createdCredentials, setCreatedCredentials] = useState<{
@@ -45,10 +46,28 @@ export default function NovoClientePage() {
     temporaryPassword: string;
   } | null>(null);
 
+  const plansQuery = useQuery({
+    queryKey: ['platform-plans'],
+    queryFn: () => listPlatformPlans(accessToken!),
+    enabled: !!accessToken,
+  });
+
+  // Nunca oferece plano interno (DEMO_INTERNAL) no fluxo comum de criação —
+  // e só planos compatíveis com o tipo de cliente selecionado (seção 4).
+  const availablePlans = useMemo(
+    () => (plansQuery.data ?? []).filter((plan) => plan.tenantType === type && !plan.isInternal),
+    [plansQuery.data, type],
+  );
+
+  // Se o tipo mudou e o plano escolhido não é mais compatível, cai no
+  // primeiro disponível — derivado no render, sem efeito/setState extra.
+  const effectivePlanCode =
+    planCode && availablePlans.some((p) => p.code === planCode) ? planCode : (availablePlans[0]?.code ?? '');
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
-    if (!name.trim() || !responsibleName.trim() || !email.trim() || !phone.trim()) {
+    if (!name.trim() || !responsibleName.trim() || !email.trim() || !phone.trim() || !effectivePlanCode) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
@@ -61,7 +80,7 @@ export default function NovoClientePage() {
         responsibleName: responsibleName.trim(),
         email: email.trim(),
         phone: phone.trim(),
-        planCode: planCode || undefined,
+        planCode: effectivePlanCode,
         startAsTrial,
       });
       toast.success('Cliente criado com sucesso');
@@ -111,6 +130,31 @@ export default function NovoClientePage() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Plano</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {availablePlans.map((plan) => (
+              <button
+                key={plan.code}
+                type="button"
+                onClick={() => setPlanCode(plan.code)}
+                className={
+                  'flex flex-col gap-1 rounded-lg border p-4 text-left text-sm transition-colors ' +
+                  (effectivePlanCode === plan.code ? 'border-primary bg-primary/5' : 'border-input hover:bg-muted/40')
+                }
+              >
+                <span className="font-medium">{plan.displayName}</span>
+                <span className="text-xs text-muted-foreground">
+                  até {plan.maxUsers} usuário{plan.maxUsers === 1 ? '' : 's'}
+                </span>
+              </button>
+            ))}
+            {plansQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando planos...</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">Dados do cliente</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -137,10 +181,6 @@ export default function NovoClientePage() {
               <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="planCode">Plano inicial</Label>
-              <Input id="planCode" value={planCode} onChange={(e) => setPlanCode(e.target.value)} placeholder="Ex.: trial, starter" />
-            </div>
-            <div className="flex flex-col gap-1.5">
               <Label>Situação inicial</Label>
               <Select value={startAsTrial ? 'trial' : 'active'} onValueChange={(v) => setStartAsTrial(v === 'trial')}>
                 <SelectTrigger>
@@ -159,7 +199,7 @@ export default function NovoClientePage() {
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || !effectivePlanCode}>
             {submitting ? 'Criando...' : 'Criar cliente'}
           </Button>
         </div>

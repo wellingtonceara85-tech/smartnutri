@@ -96,16 +96,25 @@ export class PlatformUsersService {
     return this.toListItem(membership);
   }
 
-  /** Cria o vínculo reaproveitando UsersService.createForTenant — mesma validação de e-mail duplicado e regra de tenant SOLO, sem duplicar lógica. */
+  /**
+   * Cria o vínculo reaproveitando UsersService.createForTenant — mesma
+   * validação de e-mail duplicado, limite de plano e perfil permitido, sem
+   * duplicar lógica. O próprio createForTenant já audita a criação (com
+   * este actorUserId), então não registramos um segundo AuditLog aqui.
+   */
   async createUser(actorUserId: string, dto: CreatePlatformUserDto) {
     const temporaryPassword = this.generateTemporaryPassword();
 
-    await this.usersService.createForTenant(dto.tenantId, {
-      name: dto.name,
-      email: dto.email,
-      role: dto.role,
-      password: temporaryPassword,
-    });
+    await this.usersService.createForTenant(
+      dto.tenantId,
+      {
+        name: dto.name,
+        email: dto.email,
+        role: dto.role,
+        password: temporaryPassword,
+      },
+      actorUserId,
+    );
 
     const membership = await this.prisma.userClinic.findFirstOrThrow({
       where: {
@@ -114,15 +123,6 @@ export class PlatformUsersService {
       },
       orderBy: { createdAt: 'desc' },
       select: USER_CLINIC_SELECT,
-    });
-
-    await this.audit.log({
-      tenantId: dto.tenantId,
-      actorUserId,
-      entityType: 'User',
-      entityId: membership.userId,
-      action: AuditAction.CREATE,
-      after: { email: dto.email.toLowerCase(), role: dto.role },
     });
 
     return { user: this.toListItem(membership), temporaryPassword };

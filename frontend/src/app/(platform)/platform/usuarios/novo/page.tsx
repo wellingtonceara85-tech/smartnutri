@@ -77,8 +77,8 @@ export default function NovoUsuarioPlatformPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Novo usuário</h1>
-        <p className="text-sm text-muted-foreground">Cria um usuário para um cliente já cadastrado</p>
+        <h1 className="text-2xl font-bold tracking-tight">Adicionar usuário</h1>
+        <p className="text-sm text-muted-foreground">Adicionar usuário a um cliente existente</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
