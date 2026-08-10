@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { Role } from '../../generated/prisma/client';
+import { Role, TenantType } from '../../generated/prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -50,6 +50,14 @@ export class UsersService {
   }
 
   async createForTenant(tenantId: string, dto: CreateUserDto) {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId, deletedAt: null },
+    });
+    if (!tenant) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+    await this.assertSoloTenantHasRoomForUser(tenant.id, tenant.type);
+
     const email = dto.email.toLowerCase();
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
@@ -125,5 +133,29 @@ export class UsersService {
       where: { userId_tenantId: { userId, tenantId } },
       data: { isActive: false },
     });
+  }
+
+  /**
+   * Tenant SOLO representa nutricionista independente — o modelo comercial
+   * (Missão 0005.5) é exatamente um usuário fazendo tudo. Um segundo
+   * UserClinic ativo descaracterizaria isso silenciosamente, então é
+   * bloqueado aqui, na única porta de entrada de criação de usuário —
+   * protege tanto `POST /users` (ADMIN do próprio tenant) quanto a criação
+   * pelo Platform Admin (Missão 0005.6), que reaproveita este método.
+   */
+  private async assertSoloTenantHasRoomForUser(
+    tenantId: string,
+    tenantType: TenantType,
+  ): Promise<void> {
+    if (tenantType !== TenantType.SOLO) return;
+
+    const activeCount = await this.prisma.userClinic.count({
+      where: { tenantId, isActive: true },
+    });
+    if (activeCount >= 1) {
+      throw new ConflictException(
+        'Este cliente é do tipo "nutricionista independente" (SOLO) e já possui um usuário — o modelo permite apenas um.',
+      );
+    }
   }
 }

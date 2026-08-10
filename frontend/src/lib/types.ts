@@ -783,10 +783,17 @@ export interface QueryFoodDiaryParams {
 
 export type TenantType = 'SOLO' | 'CLINIC';
 export type TenantStatus = 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
+export type PlatformRole = 'ADMIN' | 'NUTRITIONIST' | 'RECEPTION';
 
 export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
   SOLO: 'Nutricionista independente',
   CLINIC: 'Clínica',
+};
+
+export const PLATFORM_ROLE_LABELS: Record<PlatformRole, string> = {
+  ADMIN: 'Administrador(a)',
+  NUTRITIONIST: 'Nutricionista',
+  RECEPTION: 'Recepção',
 };
 
 export const TENANT_STATUS_LABELS: Record<TenantStatus, string> = {
@@ -882,6 +889,60 @@ export interface QueryPlatformTenantsParams {
   search?: string;
   status?: TenantStatus;
   type?: TenantType;
+  page?: number;
+  pageSize?: number;
+}
+
+// ============================================================================
+// Gestão de Usuários da Plataforma (Missão 0005.6)
+// ============================================================================
+
+export interface PlatformUserListItem {
+  /** Id do vínculo (UserClinic) — identificador desta linha, não do User global. */
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: PlatformRole;
+  isActive: boolean;
+  tenantId: string;
+  tenantName: string;
+  tenantType: TenantType;
+  tenantStatus: TenantStatus;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface PlatformUserListResponse {
+  data: PlatformUserListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CreatePlatformUserFormValues {
+  tenantId: string;
+  name: string;
+  email: string;
+  role: PlatformRole;
+}
+
+export interface CreatePlatformUserResponse {
+  user: PlatformUserListItem;
+  temporaryPassword: string;
+}
+
+export interface ResetPlatformUserPasswordResponse {
+  temporaryPassword: string;
+}
+
+export interface QueryPlatformUsersParams {
+  search?: string;
+  tenantId?: string;
+  role?: PlatformRole;
+  isActive?: boolean;
+  tenantType?: TenantType;
+  tenantStatus?: TenantStatus;
   page?: number;
   pageSize?: number;
 }

@@ -1,12 +1,18 @@
 import { apiFetch } from '../api-client';
 import type {
+  CreatePlatformUserFormValues,
+  CreatePlatformUserResponse,
   CreateTenantFormValues,
   CreateTenantResponse,
   PlatformDashboard,
   PlatformTenantDetail,
   PlatformTenantListResponse,
   PlatformTenantUser,
+  PlatformUserListItem,
+  PlatformUserListResponse,
   QueryPlatformTenantsParams,
+  QueryPlatformUsersParams,
+  ResetPlatformUserPasswordResponse,
   UpdateTenantFormValues,
 } from '../types';
 
@@ -62,6 +68,43 @@ export function activatePlatformTenant(accessToken: string, id: string) {
 
 export function suspendPlatformTenant(accessToken: string, id: string) {
   return apiFetch<PlatformTenantDetail>(`/platform/tenants/${id}/suspend`, {
+    method: 'POST',
+    accessToken,
+  });
+}
+
+export function listPlatformUsers(accessToken: string, query: QueryPlatformUsersParams = {}) {
+  return apiFetch<PlatformUserListResponse>(`/platform/users${buildQueryString(query)}`, { accessToken });
+}
+
+export function getPlatformUser(accessToken: string, id: string) {
+  return apiFetch<PlatformUserListItem>(`/platform/users/${id}`, { accessToken });
+}
+
+export function createPlatformUser(accessToken: string, data: CreatePlatformUserFormValues) {
+  return apiFetch<CreatePlatformUserResponse>('/platform/users', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(data),
+  });
+}
+
+export function resetPlatformUserPassword(accessToken: string, id: string) {
+  return apiFetch<ResetPlatformUserPasswordResponse>(`/platform/users/${id}/reset-password`, {
+    method: 'POST',
+    accessToken,
+  });
+}
+
+export function activatePlatformUser(accessToken: string, id: string) {
+  return apiFetch<PlatformUserListItem>(`/platform/users/${id}/activate`, {
+    method: 'POST',
+    accessToken,
+  });
+}
+
+export function suspendPlatformUser(accessToken: string, id: string) {
+  return apiFetch<PlatformUserListItem>(`/platform/users/${id}/suspend`, {
     method: 'POST',
     accessToken,
   });
