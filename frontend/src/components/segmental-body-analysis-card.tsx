@@ -154,12 +154,12 @@ export function SegmentalBodyAnalysisCard({ silhouette, current, previous = null
   const hasAnyData = current.segmentalMeasurements.length > 0;
   const activeLabel = METRIC_TABS.find((t) => t.value === metricType)?.label ?? '';
 
-  const segmentColors = {
-    RIGHT_ARM: display.RIGHT_ARM.value !== null ? 'var(--secondary)' : undefined,
-    LEFT_ARM: display.LEFT_ARM.value !== null ? 'var(--secondary)' : undefined,
-    TRUNK: display.TRUNK.value !== null ? 'var(--secondary)' : undefined,
-    RIGHT_LEG: display.RIGHT_LEG.value !== null ? 'var(--secondary)' : undefined,
-    LEFT_LEG: display.LEFT_LEG.value !== null ? 'var(--secondary)' : undefined,
+  const dataSegments = {
+    RIGHT_ARM: display.RIGHT_ARM.value !== null,
+    LEFT_ARM: display.LEFT_ARM.value !== null,
+    TRUNK: display.TRUNK.value !== null,
+    RIGHT_LEG: display.RIGHT_LEG.value !== null,
+    LEFT_LEG: display.LEFT_LEG.value !== null,
   };
 
   function horizontalCard(segment: BodySegmentId, side: 'left' | 'right') {
@@ -211,7 +211,7 @@ export function SegmentalBodyAnalysisCard({ silhouette, current, previous = null
               </div>
 
               <div className="flex flex-col items-center justify-between gap-3">
-                <BodySegmentMap silhouette={silhouette} size={120} hoveredSegment={hoveredSegment} segmentColors={segmentColors} />
+                <BodySegmentMap silhouette={silhouette} size={168} hoveredSegment={hoveredSegment} dataSegments={dataSegments} />
                 <div className="flex flex-col items-center gap-2">
                   <Connector orientation="vertical" hovered={hoveredSegment === 'TRUNK'} />
                   <SegmentInfoCard
@@ -233,7 +233,7 @@ export function SegmentalBodyAnalysisCard({ silhouette, current, previous = null
 
             {/* Container estreito — silhueta acima, cartões reorganizados em grade abaixo, sem conectores */}
             <div className="flex flex-col items-center gap-4 @2xl:hidden">
-              <BodySegmentMap silhouette={silhouette} size={130} hoveredSegment={hoveredSegment} segmentColors={segmentColors} />
+              <BodySegmentMap silhouette={silhouette} size={150} hoveredSegment={hoveredSegment} dataSegments={dataSegments} />
               <SegmentInfoCard
                 segment="TRUNK"
                 data={display.TRUNK}

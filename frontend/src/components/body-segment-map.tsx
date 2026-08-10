@@ -1,24 +1,9 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 export type BodySilhouette = 'MALE' | 'FEMALE' | 'NEUTRAL';
 export type BodySegmentId = 'RIGHT_ARM' | 'LEFT_ARM' | 'TRUNK' | 'RIGHT_LEG' | 'LEFT_LEG';
-
-interface SilhouetteMetrics {
-  shoulderWidth: number;
-  waistWidth: number;
-  hipWidth: number;
-  bicepWidth: number;
-  wristWidth: number;
-  thighWidth: number;
-  calfWidth: number;
-}
-
-// Larguras relativas por variante — só a silhueta muda; o esqueleto (posições Y) é o mesmo.
-const METRICS: Record<BodySilhouette, SilhouetteMetrics> = {
-  MALE: { shoulderWidth: 100, waistWidth: 64, hipWidth: 68, bicepWidth: 26, wristWidth: 15, thighWidth: 32, calfWidth: 19 },
-  FEMALE: { shoulderWidth: 78, waistWidth: 52, hipWidth: 82, bicepWidth: 20, wristWidth: 13, thighWidth: 32, calfWidth: 17 },
-  NEUTRAL: { shoulderWidth: 88, waistWidth: 58, hipWidth: 74, bicepWidth: 23, wristWidth: 14, thighWidth: 31, calfWidth: 18 },
-};
 
 const SEGMENT_LABELS: Record<BodySegmentId, string> = {
   RIGHT_ARM: 'Braço direito',
@@ -28,86 +13,77 @@ const SEGMENT_LABELS: Record<BodySegmentId, string> = {
   LEFT_LEG: 'Perna esquerda',
 };
 
-const DEFAULT_FILL = 'var(--muted)';
-const STROKE = 'var(--border)';
+const ACCENT = 'var(--segmental-accent)';
 
-const CX = 100;
-const SHOULDER_Y = 66;
-const WAIST_Y = 172;
-const HIP_Y = 200;
-const ARM_TOP_Y = 72;
-const WRIST_Y = 236;
-const LEG_TOP_Y = 196;
-const ANKLE_Y = 380;
-const FOOT_Y = 392;
+const SEGMENTS: BodySegmentId[] = ['RIGHT_ARM', 'LEFT_ARM', 'TRUNK', 'RIGHT_LEG', 'LEFT_LEG'];
 
-/** Cápsula cônica (topo/base arredondados, lados curvos) usada para braços e pernas. */
-function taperedCapsulePath(cxLimb: number, yTop: number, yBottom: number, widthTop: number, widthBottom: number): string {
-  const rTop = widthTop / 2;
-  const rBottom = widthBottom / 2;
-  const midTopY = yTop + (yBottom - yTop) * 0.38;
-  const midBottomY = yTop + (yBottom - yTop) * 0.62;
-  return `
-    M ${cxLimb - rTop} ${yTop + rTop}
-    A ${rTop} ${rTop} 0 0 1 ${cxLimb + rTop} ${yTop + rTop}
-    C ${cxLimb + rTop} ${midTopY}, ${cxLimb + rBottom} ${midBottomY}, ${cxLimb + rBottom} ${yBottom - rBottom}
-    A ${rBottom} ${rBottom} 0 0 1 ${cxLimb - rBottom} ${yBottom - rBottom}
-    C ${cxLimb - rBottom} ${midBottomY}, ${cxLimb - rTop} ${midTopY}, ${cxLimb - rTop} ${yTop + rTop}
-    Z
-  `;
+/** Ilustração-base (Camada 1) por variante — imagem fiel à referência aprovada pelo PO. Só
+ * feminina e masculina têm arte aprovada até o momento; neutra fica pendente de referência. */
+interface IllustrationAsset {
+  src: string;
+  /** Dimensões nativas do PNG — definem a proporção do componente. */
+  width: number;
+  height: number;
 }
 
-/** Torso com ombros arredondados e cintura marcada, via curvas de Bézier. */
-function trunkPath(m: SilhouetteMetrics): string {
-  const { shoulderWidth: sw, waistWidth: ww, hipWidth: hw } = m;
-  return `
-    M ${CX - sw / 2} ${SHOULDER_Y}
-    C ${CX - sw / 2 - 6} ${SHOULDER_Y + 30}, ${CX - ww / 2 - 14} ${WAIST_Y - 46}, ${CX - ww / 2} ${WAIST_Y}
-    C ${CX - ww / 2 - 3} ${WAIST_Y + 16}, ${CX - hw / 2} ${HIP_Y - 20}, ${CX - hw / 2} ${HIP_Y}
-    L ${CX + hw / 2} ${HIP_Y}
-    C ${CX + hw / 2} ${HIP_Y - 20}, ${CX + ww / 2 + 3} ${WAIST_Y + 16}, ${CX + ww / 2} ${WAIST_Y}
-    C ${CX + ww / 2 + 14} ${WAIST_Y - 46}, ${CX + sw / 2 + 6} ${SHOULDER_Y + 30}, ${CX + sw / 2} ${SHOULDER_Y}
-    C ${CX + sw / 2 - 14} ${SHOULDER_Y - 10}, ${CX + 20} ${SHOULDER_Y - 16}, ${CX} ${SHOULDER_Y - 14}
-    C ${CX - 20} ${SHOULDER_Y - 16}, ${CX - sw / 2 + 14} ${SHOULDER_Y - 10}, ${CX - sw / 2} ${SHOULDER_Y}
-    Z
-  `;
+const ASSETS: Partial<Record<BodySilhouette, IllustrationAsset>> = {
+  FEMALE: { src: '/illustrations/body-female.png', width: 1024, height: 1536 },
+  MALE: { src: '/illustrations/body-male.png', width: 1024, height: 1536 },
+};
+
+/** Região de interação (Camada 2) — retângulo em % da largura/altura da imagem, calibrado a
+ * partir dos pixels reais de cada ilustração (não é geometria anatômica própria: é um hitbox
+ * aproximado sobre a arte já pronta). x/y em percentual 0–100 do canto superior esquerdo. */
+interface OverlayRegion {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
 }
 
-interface LimbGeometry {
-  path: string;
-  footCx: number;
-}
-
-function armGeometry(m: SilhouetteMetrics, side: 'RIGHT_ARM' | 'LEFT_ARM'): string {
-  const armCx = side === 'RIGHT_ARM' ? CX - m.shoulderWidth / 2 : CX + m.shoulderWidth / 2;
-  return taperedCapsulePath(armCx, ARM_TOP_Y, WRIST_Y, m.bicepWidth, m.wristWidth);
-}
-
-function legGeometry(m: SilhouetteMetrics, side: 'RIGHT_LEG' | 'LEFT_LEG'): LimbGeometry {
-  const legCx = side === 'RIGHT_LEG' ? CX - m.hipWidth / 2 + m.thighWidth / 2 - 1 : CX + m.hipWidth / 2 - m.thighWidth / 2 + 1;
-  return { path: taperedCapsulePath(legCx, LEG_TOP_Y, ANKLE_Y, m.thighWidth, m.calfWidth), footCx: legCx };
-}
+const REGIONS: Partial<Record<BodySilhouette, Record<BodySegmentId, OverlayRegion>>> = {
+  FEMALE: {
+    TRUNK: { x0: 34.1, y0: 22.1, x1: 65.4, y1: 59.9 },
+    RIGHT_ARM: { x0: 27.3, y0: 22.1, x1: 38.1, y1: 60.2 },
+    LEFT_ARM: { x0: 61.0, y0: 22.1, x1: 72.8, y1: 60.2 },
+    RIGHT_LEG: { x0: 34.7, y0: 59.9, x1: 48.8, y1: 99.1 },
+    LEFT_LEG: { x0: 50.3, y0: 59.9, x1: 64.5, y1: 99.1 },
+  },
+  MALE: {
+    TRUNK: { x0: 33.2, y0: 20.2, x1: 66.4, y1: 62.8 },
+    RIGHT_ARM: { x0: 24.9, y0: 20.2, x1: 36.6, y1: 62.2 },
+    LEFT_ARM: { x0: 62.5, y0: 20.2, x1: 74.2, y1: 62.2 },
+    RIGHT_LEG: { x0: 30.8, y0: 62.8, x1: 48.8, y1: 98.0 },
+    LEFT_LEG: { x0: 50.3, y0: 62.8, x1: 68.8, y1: 98.0 },
+  },
+};
 
 interface BodySegmentMapProps {
   silhouette: BodySilhouette;
-  segmentColors?: Partial<Record<BodySegmentId, string>>;
+  /** Segmentos com pelo menos uma medida registrada — os demais aparecem esmaecidos na figura. */
+  dataSegments?: Partial<Record<BodySegmentId, boolean>>;
   selectedSegment?: BodySegmentId;
   hoveredSegment?: BodySegmentId | null;
   onSegmentClick?: (segment: BodySegmentId) => void;
   onSegmentHover?: (segment: BodySegmentId | null) => void;
+  /** Largura de renderização em px — a altura é derivada da proporção nativa da ilustração. */
   size?: number;
   className?: string;
   interactive?: boolean;
 }
 
 /**
- * Silhueta corporal original em SVG — três variantes (masculino/feminino/neutro) compartilhando o
- * mesmo esqueleto de coordenadas; só a largura/afunilamento dos segmentos muda. A escolha da
- * variante é sempre manual (Patient.bodySilhouettePreference), nunca inferida deste componente.
+ * Ilustração corporal — Camada 1 é a arte aprovada pelo PO (imagem estática, fiel à referência
+ * visual); Camada 2 é um overlay SVG transparente por cima, responsável somente pela interação
+ * (hover/seleção por segmento). A arte nunca é recolorida — o destaque é sempre um overlay verde
+ * translúcido + contorno, para não sujar a roupa/pele já ilustrada.
+ *
+ * Feminina e masculina usam a arte aprovada; neutra ainda não tem referência visual e cai para
+ * `null` até que uma seja fornecida.
  */
 export function BodySegmentMap({
   silhouette,
-  segmentColors,
+  dataSegments,
   selectedSegment,
   hoveredSegment,
   onSegmentClick,
@@ -116,65 +92,62 @@ export function BodySegmentMap({
   className,
   interactive = false,
 }: BodySegmentMapProps) {
-  const m = METRICS[silhouette];
-  const rightLeg = legGeometry(m, 'RIGHT_LEG');
-  const leftLeg = legGeometry(m, 'LEFT_LEG');
+  const asset = ASSETS[silhouette];
+  const regions = REGIONS[silhouette];
 
-  function fillFor(segment: BodySegmentId) {
-    if (hoveredSegment === segment || selectedSegment === segment) return 'var(--primary)';
-    return segmentColors?.[segment] ?? DEFAULT_FILL;
+  if (!asset || !regions) {
+    return null;
   }
 
-  function segmentProps(segment: BodySegmentId) {
-    const active = interactive || !!onSegmentClick;
-    return {
-      fill: fillFor(segment),
-      stroke: STROKE,
-      strokeWidth: 1.5,
-      className: 'transition-colors duration-200 print:transition-none',
-      onClick: onSegmentClick ? () => onSegmentClick(segment) : undefined,
-      onMouseEnter: onSegmentHover ? () => onSegmentHover(segment) : undefined,
-      onMouseLeave: onSegmentHover ? () => onSegmentHover(null) : undefined,
-      style: active ? { cursor: onSegmentClick ? 'pointer' : 'default' } : undefined,
-      'aria-hidden': true as const,
-    };
+  const height = size * (asset.height / asset.width);
+  const clickable = interactive || !!onSegmentClick;
+
+  function isActive(segment: BodySegmentId) {
+    return hoveredSegment === segment || selectedSegment === segment;
+  }
+
+  function hasData(segment: BodySegmentId) {
+    return dataSegments?.[segment] ?? false;
   }
 
   return (
-    <svg
-      viewBox="0 0 200 400"
-      width={size}
-      height={size * 2}
+    <div
       className={className}
+      style={{ position: 'relative', width: size, height, lineHeight: 0 }}
       role="img"
       aria-label={`Silhueta corporal — variante ${silhouette === 'MALE' ? 'masculina' : silhouette === 'FEMALE' ? 'feminina' : 'neutra'}`}
     >
-      {/* Cabeça e pescoço — neutros, não fazem parte de nenhum segmento mensurável */}
-      <circle cx={CX} cy={30} r={20} fill="var(--muted)" stroke={STROKE} strokeWidth={1.5} />
-      <path
-        d={taperedCapsulePath(CX, 46, 68, 18, 22)}
-        fill="var(--muted)"
-        stroke={STROKE}
-        strokeWidth={1.5}
-      />
-
-      {/* Braço direito (anatômico) — aparece à esquerda de quem olha a figura de frente */}
-      <path d={armGeometry(m, 'RIGHT_ARM')} {...segmentProps('RIGHT_ARM')} />
-
-      {/* Braço esquerdo (anatômico) — aparece à direita de quem olha a figura de frente */}
-      <path d={armGeometry(m, 'LEFT_ARM')} {...segmentProps('LEFT_ARM')} />
-
-      {/* Perna direita (anatômica) */}
-      <path d={rightLeg.path} {...segmentProps('RIGHT_LEG')} />
-      <ellipse cx={rightLeg.footCx} cy={FOOT_Y} rx={m.calfWidth / 2 + 4} ry={7} fill={fillFor('RIGHT_LEG')} stroke={STROKE} strokeWidth={1.5} aria-hidden />
-
-      {/* Perna esquerda (anatômica) */}
-      <path d={leftLeg.path} {...segmentProps('LEFT_LEG')} />
-      <ellipse cx={leftLeg.footCx} cy={FOOT_Y} rx={m.calfWidth / 2 + 4} ry={7} fill={fillFor('LEFT_LEG')} stroke={STROKE} strokeWidth={1.5} aria-hidden />
-
-      {/* Tronco — desenhado por cima da inserção dos membros para uma junção limpa nos ombros/quadril */}
-      <path d={trunkPath(m)} {...segmentProps('TRUNK')} />
-    </svg>
+      <img src={asset.src} alt="" width={asset.width} height={asset.height} style={{ display: 'block', width: '100%', height: '100%' }} draggable={false} />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-hidden>
+        {SEGMENTS.map((segment) => {
+          const r = regions[segment];
+          const active = isActive(segment);
+          return (
+            <rect
+              key={segment}
+              x={r.x0}
+              y={r.y0}
+              width={r.x1 - r.x0}
+              height={r.y1 - r.y0}
+              rx={2.5}
+              ry={2.5}
+              fill={ACCENT}
+              fillOpacity={active ? 0.24 : 0}
+              stroke={ACCENT}
+              strokeOpacity={active ? 0.9 : 0}
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              opacity={hasData(segment) ? 1 : 0.5}
+              className="transition-[fill-opacity,stroke-opacity] duration-200 print:transition-none"
+              style={{ cursor: clickable ? 'pointer' : onSegmentHover ? 'default' : undefined, pointerEvents: onSegmentHover || onSegmentClick ? 'auto' : 'none' }}
+              onClick={onSegmentClick ? () => onSegmentClick(segment) : undefined}
+              onMouseEnter={onSegmentHover ? () => onSegmentHover(segment) : undefined}
+              onMouseLeave={onSegmentHover ? () => onSegmentHover(null) : undefined}
+            />
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 

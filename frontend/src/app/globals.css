@@ -41,6 +41,8 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-segmental-accent: var(--segmental-accent);
+  --color-segmental-accent-soft: var(--segmental-accent-soft);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -83,6 +85,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Acento fixo da ilustração corporal segmentar — baseado no preset "Sálvia" (#3F7658/#8CAF9A),
+     a cor verde padrão da identidade SmartNutri em PROFESSIONAL_PALETTE_PRESETS (lib/types.ts).
+     Independente de --primary, que é sobrescrito por tema dinâmico do profissional. */
+  --segmental-accent: #3f7658;
+  --segmental-accent-soft: #8caf9a;
 }
 
 .dark {
@@ -109,6 +117,10 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+
+  /* Mesmo acento, levemente clareado para manter contraste sobre fundo escuro. */
+  --segmental-accent: #5b9a78;
+  --segmental-accent-soft: #a5c9b6;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
