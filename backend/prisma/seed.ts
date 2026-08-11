@@ -4,11 +4,14 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import {
   AppointmentModality,
   AppointmentStatus,
+  CycleStatus,
+  DiscountType,
   Gender,
   PatientStatus,
   PrismaClient,
   Role,
 } from '../src/generated/prisma/client';
+import { computeDiscountAmount, computeFinalValue } from '../src/common/utils/money.util';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -1389,6 +1392,60 @@ async function main() {
         },
       ],
     });
+
+    // Contratação de demonstração (Missão 0005.8) — Beatriz contrata o Plano
+    // Trimestral com 10% de desconto: R$900 - 10% = R$810, reproduzindo o
+    // exemplo do prompt da missão. As duas consultas de Beatriz já criadas
+    // acima são retroativamente vinculadas a este ciclo (2 de 3 previstas).
+    const trimestral = await prisma.plan.findFirstOrThrow({
+      where: { tenantId: tenant.id, name: 'Plano Trimestral', deletedAt: null },
+    });
+    const pix = await prisma.paymentMethod.findFirstOrThrow({
+      where: { tenantId: tenant.id, name: 'PIX' },
+    });
+    const cycleStartDate = atHour(-35, 9, 0);
+    const cycleDiscount = computeDiscountAmount(
+      trimestral.defaultPrice,
+      DiscountType.PERCENTAGE,
+      10,
+    );
+    const beatrizCycle = await prisma.treatmentCycle.create({
+      data: {
+        tenantId: tenant.id,
+        patientId: beatrizId,
+        planId: trimestral.id,
+        cycleNumber: 1,
+        status: CycleStatus.ACTIVE,
+        startDate: cycleStartDate,
+        expectedEndDate: new Date(
+          cycleStartDate.getFullYear(),
+          cycleStartDate.getMonth() + trimestral.durationMonths,
+          cycleStartDate.getDate(),
+        ),
+        appointmentCountPlanned: trimestral.suggestedAppointments,
+        intervalDaysPlanned: trimestral.suggestedIntervalDays,
+        contractedValue: trimestral.defaultPrice,
+        discountType: DiscountType.PERCENTAGE,
+        discountValue: 10,
+        discount: cycleDiscount,
+        finalValue: computeFinalValue(trimestral.defaultPrice, cycleDiscount, 0),
+        installmentCount: 3,
+        paymentMethodId: pix.id,
+        notes: 'Contratação de demonstração (seed)',
+        createdByUserId: nutritionistUserId,
+      },
+    });
+
+    const beatrizCycleAppointments = await prisma.appointment.findMany({
+      where: { tenantId: tenant.id, patientId: beatrizId },
+      orderBy: { scheduledAt: 'asc' },
+    });
+    for (const [index, appt] of beatrizCycleAppointments.entries()) {
+      await prisma.appointment.update({
+        where: { id: appt.id },
+        data: { treatmentCycleId: beatrizCycle.id, sequenceNumber: index + 1 },
+      });
+    }
   }
 
   console.log('Seed concluído.');

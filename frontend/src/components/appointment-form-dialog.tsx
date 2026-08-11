@@ -10,13 +10,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { createAppointment, listAppointmentTypes } from '@/lib/api/appointments';
+import { listPaymentMethods } from '@/lib/api/payment-methods';
 import { getPatient, listPatients } from '@/lib/api/patients';
+import { listPatientTreatmentCycles } from '@/lib/api/treatment-cycles';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
 import { useTenantAuth } from '@/lib/auth-context';
 import { localDateTimeToUtcIso, todayLocalDateKey } from '@/lib/appointment-datetime';
 import { maskPhone } from '@/lib/masks';
-import { APPOINTMENT_MODALITY_LABELS, type AppointmentModality, type AppointmentType } from '@/lib/types';
+import {
+  APPOINTMENT_MODALITY_LABELS,
+  type AppointmentModality,
+  type AppointmentType,
+  type DiscountType,
+} from '@/lib/types';
+
+function currencyFormat(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
 const DURATION_PRESETS = [30, 45, 60, 90];
 
@@ -98,6 +109,12 @@ function AppointmentFormBody({
   const [adminNotes, setAdminNotes] = useState('');
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // null = ainda não escolhido manualmente — assume o único ciclo ativo do paciente, se houver.
+  const [linkChoice, setLinkChoice] = useState<string | null>(null);
+  const [standaloneValue, setStandaloneValue] = useState('');
+  const [standaloneDiscountType, setStandaloneDiscountType] = useState<DiscountType>('PERCENTAGE');
+  const [standaloneDiscountValue, setStandaloneDiscountValue] = useState('');
+  const [standalonePaymentMethodId, setStandalonePaymentMethodId] = useState<string | null>(null);
 
   const nutritionistsQuery = useQuery({
     queryKey: ['nutritionists'],
@@ -114,6 +131,11 @@ function AppointmentFormBody({
     queryFn: () => listPatients(accessToken!, { search: patientSearch, pageSize: 6 }),
     enabled: !patientId && patientSearch.trim().length >= 2,
   });
+  const paymentMethodsQuery = useQuery({
+    queryKey: ['payment-methods'],
+    queryFn: () => listPaymentMethods(accessToken!),
+    enabled: !!accessToken,
+  });
 
   // Paciente travado (perfil/retorno) vem da query; busca manual vive em estado local — nunca sincronizados via efeito.
   const selectedPatient: PreselectedPatient | null = patientId
@@ -127,6 +149,27 @@ function AppointmentFormBody({
         }
       : null
     : manualPatient;
+
+  const treatmentCyclesQuery = useQuery({
+    queryKey: ['patient-treatment-cycles', selectedPatient?.id],
+    queryFn: () => listPatientTreatmentCycles(accessToken!, selectedPatient!.id),
+    enabled: !!accessToken && !!selectedPatient,
+  });
+  const activeCycles = (treatmentCyclesQuery.data ?? []).filter((c) => c.status === 'ACTIVE');
+  const AVULSO_VALUE = 'AVULSO';
+  // Se o paciente foi trocado depois de uma escolha manual, linkChoice pode apontar para um
+  // ciclo que não existe mais na lista atual (nenhum <SelectItem> corresponderia) — nesse caso
+  // o Select cairia no fallback do Base UI e renderizaria o UUID cru como rótulo. Por isso a
+  // escolha só é respeitada se ainda for válida para o paciente selecionado agora; do contrário
+  // volta a auto-escolher, sem precisar de efeito para "resetar" o estado ao trocar de paciente.
+  const linkChoiceStillValid =
+    linkChoice !== null && (linkChoice === AVULSO_VALUE || activeCycles.some((c) => c.id === linkChoice));
+  const effectiveLink = linkChoiceStillValid
+    ? (linkChoice as string)
+    : activeCycles.length > 0
+      ? activeCycles[0].id
+      : AVULSO_VALUE;
+  const selectedCycle = activeCycles.find((c) => c.id === effectiveLink) ?? null;
 
   // Nutricionista efetivo: escolha manual > pré-preenchido > único disponível > o próprio ator, nessa ordem — derivado, não sincronizado.
   const nutritionistUserId =
@@ -152,6 +195,17 @@ function AppointmentFormBody({
     const endH = Math.floor(totalMinutes / 60) % 24;
     const endM = totalMinutes % 60;
     return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+  })();
+
+  const standalonePreview = (() => {
+    const value = Number(standaloneValue) || 0;
+    if (value <= 0) return null;
+    const discount = Number(standaloneDiscountValue) || 0;
+    const discountAmount = standaloneDiscountType === 'PERCENTAGE' ? (value * discount) / 100 : discount;
+    const finalValue = Math.max(value - discountAmount, 0);
+    return discount > 0
+      ? `Valor final: ${currencyFormat(finalValue)} (${currencyFormat(value)} − ${currencyFormat(discountAmount)})`
+      : `Valor final: ${currencyFormat(finalValue)}`;
   })();
 
   async function handleSubmit() {
@@ -182,6 +236,12 @@ function AppointmentFormBody({
         onlineMeetingUrl: onlineMeetingUrl || undefined,
         adminNotes: adminNotes || undefined,
         isConfirmed,
+        treatmentCycleId: selectedCycle ? selectedCycle.id : undefined,
+        standaloneValue: !selectedCycle && standaloneValue ? Number(standaloneValue) : undefined,
+        standaloneDiscountType: !selectedCycle && standaloneValue ? standaloneDiscountType : undefined,
+        standaloneDiscountValue:
+          !selectedCycle && standaloneValue && standaloneDiscountValue ? Number(standaloneDiscountValue) : undefined,
+        standalonePaymentMethodId: !selectedCycle && standalonePaymentMethodId ? standalonePaymentMethodId : undefined,
       });
       toast.success('Consulta agendada');
       await queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -332,6 +392,117 @@ function AppointmentFormBody({
             </SelectContent>
           </Select>
         </div>
+
+        {selectedPatient && (
+          <div className="flex flex-col gap-3 rounded-lg border p-3">
+            {activeCycles.length > 0 ? (
+              <>
+                <Label>Cobrança</Label>
+                <Select value={effectiveLink} onValueChange={(v) => v && setLinkChoice(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeCycles.map((cycle) => {
+                      const nextSequence = cycle._count.appointments + 1;
+                      const exceeds = nextSequence > cycle.appointmentCountPlanned;
+                      return (
+                        <SelectItem key={cycle.id} value={cycle.id}>
+                          {cycle.plan.name} — {nextSequence}ª consulta
+                          {exceeds
+                            ? ` (excede as ${cycle.appointmentCountPlanned} previstas no plano)`
+                            : ` de ${cycle.appointmentCountPlanned}`}
+                        </SelectItem>
+                      );
+                    })}
+                    <SelectItem value={AVULSO_VALUE}>Avulsa (sem plano)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {selectedCycle && (
+                  <p
+                    className={
+                      selectedCycle._count.appointments + 1 > selectedCycle.appointmentCountPlanned
+                        ? 'text-xs font-medium text-amber-700 dark:text-amber-500'
+                        : 'text-xs text-muted-foreground'
+                    }
+                  >
+                    {selectedCycle._count.appointments + 1 > selectedCycle.appointmentCountPlanned
+                      ? `${selectedCycle._count.appointments + 1}ª consulta — excede as ${selectedCycle.appointmentCountPlanned} consultas previstas no plano. O agendamento não é bloqueado, mas fica sinalizado aqui.`
+                      : 'Vinculada ao plano contratado — valor e desconto já definidos na contratação, não são pedidos de novo.'}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Paciente sem plano ativo — informe os valores da consulta avulsa abaixo (opcional).
+              </p>
+            )}
+
+            {!selectedCycle && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="appt-standalone-value">Valor da consulta</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    id="appt-standalone-value"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="R$"
+                    value={standaloneValue}
+                    onChange={(e) => setStandaloneValue(e.target.value)}
+                  />
+                  <Select
+                    value={standalonePaymentMethodId ?? ''}
+                    onValueChange={(v) => setStandalonePaymentMethodId(v)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Forma de pagamento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentMethodsQuery.data?.map((method) => (
+                        <SelectItem key={method.id} value={method.id}>
+                          {method.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {standaloneValue && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={standaloneDiscountType === 'FIXED' ? 'default' : 'outline'}
+                        onClick={() => setStandaloneDiscountType('FIXED')}
+                      >
+                        R$
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={standaloneDiscountType === 'PERCENTAGE' ? 'default' : 'outline'}
+                        onClick={() => setStandaloneDiscountType('PERCENTAGE')}
+                      >
+                        %
+                      </Button>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Desconto"
+                      className="flex-1"
+                      value={standaloneDiscountValue}
+                      onChange={(e) => setStandaloneDiscountValue(e.target.value)}
+                    />
+                  </div>
+                )}
+                {standalonePreview && <p className="text-xs text-muted-foreground">{standalonePreview}</p>}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <Label>Modalidade</Label>

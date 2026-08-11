@@ -20,6 +20,8 @@ import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { MealPlansModule } from './modules/meal-plans/meal-plans.module';
 import { FoodDiaryModule } from './modules/food-diary/food-diary.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { PaymentMethodsModule } from './modules/payment-methods/payment-methods.module';
+import { TreatmentCyclesModule } from './modules/treatment-cycles/treatment-cycles.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { PlatformModule } from './modules/platform/platform.module';
     MealPlansModule,
     FoodDiaryModule,
     PlatformModule,
+    PaymentMethodsModule,
+    TreatmentCyclesModule,
   ],
   controllers: [AppController],
   providers: [

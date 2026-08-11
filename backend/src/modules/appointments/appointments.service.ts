@@ -7,8 +7,13 @@ import {
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
+  computeDiscountAmount,
+  computeFinalValue,
+} from '../../common/utils/money.util';
+import {
   AppointmentStatus,
   AuditAction,
+  CycleStatus,
   Prisma,
   Role,
 } from '../../generated/prisma/client';
@@ -34,6 +39,15 @@ const APPOINTMENT_INCLUDE = {
   },
   nutritionistUser: { select: { id: true, name: true } },
   appointmentType: { select: { id: true, name: true, color: true } },
+  treatmentCycle: {
+    select: {
+      id: true,
+      cycleNumber: true,
+      appointmentCountPlanned: true,
+      plan: { select: { id: true, name: true } },
+    },
+  },
+  standalonePaymentMethod: { select: { id: true, name: true } },
   createdByUser: { select: { id: true, name: true } },
   rescheduledFromAppointment: { select: { id: true, scheduledAt: true } },
   rescheduledIntoAppointment: { select: { id: true, scheduledAt: true } },
@@ -96,7 +110,10 @@ const STATUS_LABELS: Record<AppointmentStatus, string> = {
   [AppointmentStatus.CONFIRMED]: 'Confirmada',
   [AppointmentStatus.IN_PROGRESS]: 'Em atendimento',
   [AppointmentStatus.DONE]: 'Realizada',
-  [AppointmentStatus.CANCELLED_BY_CLINIC]: 'Cancelada pela profissional',
+  // Rótulo neutro de propósito — quem exatamente cancelou (admin/recepção/
+  // nutricionista) vem de AppointmentStatusHistory.changedByRole, nunca
+  // presumido pelo status em si (bug da Missão 0005.8, seção 7).
+  [AppointmentStatus.CANCELLED_BY_CLINIC]: 'Cancelada pela clínica',
   [AppointmentStatus.CANCELLED_BY_PATIENT]: 'Cancelada pelo paciente',
   [AppointmentStatus.NO_SHOW]: 'Não compareceu',
   [AppointmentStatus.RESCHEDULED]: 'Reagendada',
@@ -168,6 +185,9 @@ export class AppointmentsService {
     const end = this.addMinutes(start, dto.durationMinutes);
     await this.assertNoConflict(tenantId, nutritionistUserId, start, end);
 
+    const { sequenceNumber, standaloneFinalValue } =
+      await this.resolvePricingFields(tenantId, dto);
+
     const initialStatus = dto.isConfirmed
       ? AppointmentStatus.CONFIRMED
       : AppointmentStatus.AWAITING_CONFIRMATION;
@@ -176,6 +196,8 @@ export class AppointmentsService {
       const appointment = await tx.appointment.create({
         data: {
           tenantId,
+          treatmentCycleId: dto.treatmentCycleId,
+          sequenceNumber,
           patientId: dto.patientId,
           nutritionistUserId,
           appointmentTypeId: dto.appointmentTypeId,
@@ -188,6 +210,11 @@ export class AppointmentsService {
           status: initialStatus,
           confirmedAt: dto.isConfirmed ? new Date() : null,
           createdByUserId: actorUserId,
+          standaloneValue: dto.standaloneValue,
+          standaloneDiscountType: dto.standaloneDiscountType,
+          standaloneDiscountValue: dto.standaloneDiscountValue,
+          standaloneFinalValue,
+          standalonePaymentMethodId: dto.standalonePaymentMethodId,
         },
         include: APPOINTMENT_INCLUDE,
       });
@@ -198,6 +225,7 @@ export class AppointmentsService {
           fromStatus: null,
           toStatus: initialStatus,
           changedByUserId: actorUserId,
+          changedByRole: actorRole,
           reason: 'Consulta criada',
         },
       });
@@ -296,6 +324,7 @@ export class AppointmentsService {
     const updated = await this.transitionStatus(
       tenantId,
       actorUserId,
+      actorRole,
       id,
       before.status,
       AppointmentStatus.CONFIRMED,
@@ -329,6 +358,7 @@ export class AppointmentsService {
     const updated = await this.transitionStatus(
       tenantId,
       actorUserId,
+      actorRole,
       id,
       before.status,
       AppointmentStatus.IN_PROGRESS,
@@ -363,6 +393,7 @@ export class AppointmentsService {
     const updated = await this.transitionStatus(
       tenantId,
       actorUserId,
+      actorRole,
       id,
       before.status,
       AppointmentStatus.DONE,
@@ -405,6 +436,7 @@ export class AppointmentsService {
     const updated = await this.transitionStatus(
       tenantId,
       actorUserId,
+      actorRole,
       id,
       before.status,
       toStatus,
@@ -438,6 +470,7 @@ export class AppointmentsService {
     const updated = await this.transitionStatus(
       tenantId,
       actorUserId,
+      actorRole,
       id,
       before.status,
       AppointmentStatus.NO_SHOW,
@@ -494,6 +527,7 @@ export class AppointmentsService {
           fromStatus: original.status,
           toStatus: AppointmentStatus.RESCHEDULED,
           changedByUserId: actorUserId,
+          changedByRole: actorRole,
           reason: dto.reason ?? 'Reagendada',
         },
       });
@@ -502,6 +536,7 @@ export class AppointmentsService {
         data: {
           tenantId,
           treatmentCycleId: original.treatmentCycleId,
+          sequenceNumber: original.sequenceNumber,
           patientId: original.patientId,
           nutritionistUserId: original.nutritionistUserId,
           appointmentTypeId: original.appointmentTypeId,
@@ -514,6 +549,11 @@ export class AppointmentsService {
           status: AppointmentStatus.SCHEDULED,
           rescheduledFromAppointmentId: id,
           createdByUserId: actorUserId,
+          standaloneValue: original.standaloneValue,
+          standaloneDiscountType: original.standaloneDiscountType,
+          standaloneDiscountValue: original.standaloneDiscountValue,
+          standaloneFinalValue: original.standaloneFinalValue,
+          standalonePaymentMethodId: original.standalonePaymentMethodId,
         },
       });
       await tx.appointmentStatusHistory.create({
@@ -522,6 +562,7 @@ export class AppointmentsService {
           appointmentId: created.id,
           fromStatus: null,
           toStatus: AppointmentStatus.SCHEDULED,
+          changedByRole: actorRole,
           changedByUserId: actorUserId,
           reason: dto.reason ? `Reagendada: ${dto.reason}` : 'Reagendada',
         },
@@ -550,6 +591,7 @@ export class AppointmentsService {
   private async transitionStatus(
     tenantId: string,
     actorUserId: string,
+    actorRole: Role,
     id: string,
     fromStatus: AppointmentStatus,
     toStatus: AppointmentStatus,
@@ -569,6 +611,7 @@ export class AppointmentsService {
           fromStatus,
           toStatus,
           changedByUserId: actorUserId,
+          changedByRole: actorRole,
           reason,
         },
       });
@@ -662,6 +705,86 @@ export class AppointmentsService {
       throw new NotFoundException('Paciente não encontrado');
     }
     return patient;
+  }
+
+  /**
+   * treatmentCycleId e os campos standalone* são mutuamente exclusivos
+   * (seção 5 da Missão 0005.8) — um ciclo já carrega seu próprio valor, uma
+   * consulta avulsa pode opcionalmente registrar o dela. sequenceNumber e
+   * standaloneFinalValue nunca vêm do cliente, sempre calculados aqui.
+   */
+  private async resolvePricingFields(
+    tenantId: string,
+    dto: CreateAppointmentDto,
+  ): Promise<{
+    sequenceNumber?: number;
+    standaloneFinalValue?: Prisma.Decimal;
+  }> {
+    const hasStandaloneFields =
+      dto.standaloneValue !== undefined ||
+      dto.standaloneDiscountType !== undefined ||
+      dto.standaloneDiscountValue !== undefined ||
+      dto.standalonePaymentMethodId !== undefined;
+
+    if (dto.treatmentCycleId && hasStandaloneFields) {
+      throw new BadRequestException(
+        'Consulta vinculada a um ciclo não deve informar valor/desconto avulso',
+      );
+    }
+
+    if (dto.treatmentCycleId) {
+      const cycle = await this.prisma.treatmentCycle.findFirst({
+        where: {
+          id: dto.treatmentCycleId,
+          tenantId,
+          patientId: dto.patientId,
+          deletedAt: null,
+        },
+      });
+      if (!cycle) {
+        throw new NotFoundException(
+          'Ciclo de tratamento não encontrado para este paciente',
+        );
+      }
+      if (cycle.status !== CycleStatus.ACTIVE) {
+        throw new BadRequestException(
+          'Só é possível vincular consultas a um ciclo ativo',
+        );
+      }
+      const existingCount = await this.prisma.appointment.count({
+        where: { treatmentCycleId: dto.treatmentCycleId, deletedAt: null },
+      });
+      return { sequenceNumber: existingCount + 1 };
+    }
+
+    if (dto.standalonePaymentMethodId) {
+      const method = await this.prisma.paymentMethod.findFirst({
+        where: { id: dto.standalonePaymentMethodId, tenantId },
+      });
+      if (!method) {
+        throw new NotFoundException('Forma de pagamento não encontrada');
+      }
+    }
+
+    if (dto.standaloneValue === undefined) {
+      return {};
+    }
+
+    const discountType = dto.standaloneDiscountType ?? 'FIXED';
+    const discountValue = dto.standaloneDiscountValue ?? 0;
+    if (discountType === 'PERCENTAGE' && discountValue > 100) {
+      throw new BadRequestException(
+        'Desconto percentual não pode passar de 100%',
+      );
+    }
+    const discount = computeDiscountAmount(
+      dto.standaloneValue,
+      discountType,
+      discountValue,
+    );
+    return {
+      standaloneFinalValue: computeFinalValue(dto.standaloneValue, discount, 0),
+    };
   }
 
   private async assertAppointmentTypeInTenant(

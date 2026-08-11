@@ -363,8 +363,10 @@ model PaymentMethod {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  payments Payment[]
+  tenant                 Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments               Payment[]
+  treatmentCycles        TreatmentCycle[]
+  standaloneAppointments Appointment[]    @relation("AppointmentStandalonePaymentMethod")
 
   @@unique([tenantId, name])
 }
@@ -382,6 +384,15 @@ enum CycleStatus {
   RENEWED
 }
 
+/**
+ * FIXED = desconto/valor em R$; PERCENTAGE = percentual sobre o preço-base — o preço-base
+ * (Plan.defaultPrice / contractedValue) nunca é alterado pelo desconto, só o valor final.
+ */
+enum DiscountType {
+  FIXED
+  PERCENTAGE
+}
+
 model TreatmentCycle {
   id              String      @id @default(uuid())
   tenantId        String
@@ -396,12 +407,18 @@ model TreatmentCycle {
   // Snapshot dos valores do Plan no momento da criação (nunca referência viva)
   appointmentCountPlanned Int
   intervalDaysPlanned     Int
-  contractedValue         Decimal @db.Decimal(12, 2)
-  discount                Decimal @default(0) @db.Decimal(12, 2)
-  surcharge               Decimal @default(0) @db.Decimal(12, 2)
-  finalValue              Decimal @db.Decimal(12, 2)
-  downPayment             Decimal @default(0) @db.Decimal(12, 2)
+  contractedValue         Decimal      @db.Decimal(12, 2)
+  // discountType/discountValue são a entrada bruta (R$ ou %) informada na contratação;
+  // discount é sempre o valor em R$ já calculado a partir dela — mantido para não quebrar
+  // quem já lê `discount` como quantia monetária (relatórios, futuro Financeiro).
+  discountType            DiscountType @default(FIXED)
+  discountValue           Decimal      @default(0) @db.Decimal(12, 2)
+  discount                Decimal      @default(0) @db.Decimal(12, 2)
+  surcharge               Decimal      @default(0) @db.Decimal(12, 2)
+  finalValue              Decimal      @db.Decimal(12, 2)
+  downPayment             Decimal      @default(0) @db.Decimal(12, 2)
   installmentCount        Int
+  paymentMethodId         String?
 
   notes              String?
   closureReason      String?
@@ -414,6 +431,7 @@ model TreatmentCycle {
   tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   patient          Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
   plan             Plan            @relation(fields: [planId], references: [id])
+  paymentMethod    PaymentMethod?  @relation(fields: [paymentMethodId], references: [id])
   createdByUser    User            @relation("CycleCreatedBy", fields: [createdByUserId], references: [id])
   renewedFromCycle TreatmentCycle? @relation("CycleRenewal", fields: [renewedFromCycleId], references: [id])
   renewedIntoCycle TreatmentCycle? @relation("CycleRenewal")
@@ -480,6 +498,16 @@ model Appointment {
   updatedAt                    DateTime            @updatedAt
   deletedAt                    DateTime?
 
+  // Preço de consulta avulsa (sem treatmentCycleId) — mutuamente exclusivo com o vínculo a um
+  // ciclo, que já carrega seu próprio valor/desconto contratados. Nunca preenchido junto com
+  // treatmentCycleId (Missão 0005.8, seção 5). standaloneFinalValue é sempre calculado no
+  // servidor a partir de standaloneValue + standaloneDiscountType/discountValue.
+  standaloneValue           Decimal?      @db.Decimal(12, 2)
+  standaloneDiscountType    DiscountType?
+  standaloneDiscountValue   Decimal?      @db.Decimal(12, 2)
+  standaloneFinalValue      Decimal?      @db.Decimal(12, 2)
+  standalonePaymentMethodId String?
+
   tenant                     Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   treatmentCycle             TreatmentCycle?            @relation(fields: [treatmentCycleId], references: [id], onDelete: Cascade)
   patient                    Patient                    @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -489,6 +517,7 @@ model Appointment {
   rescheduledIntoAppointment Appointment?               @relation("AppointmentReschedule")
   createdByUser              User                       @relation("AppointmentCreatedBy", fields: [createdByUserId], references: [id])
   updatedByUser              User?                      @relation("AppointmentUpdatedBy", fields: [updatedByUserId], references: [id])
+  standalonePaymentMethod    PaymentMethod?             @relation("AppointmentStandalonePaymentMethod", fields: [standalonePaymentMethodId], references: [id])
   statusHistory              AppointmentStatusHistory[]
   charges                    Charge[]
   patientEvolutions          PatientEvolution[]
@@ -505,6 +534,11 @@ model AppointmentStatusHistory {
   fromStatus      AppointmentStatus?
   toStatus        AppointmentStatus
   changedByUserId String
+  // Papel do autor no momento da ação — nullable porque histórico anterior a essa coluna não
+  // tem como ser retroativamente preenchido; nunca nulo em linhas criadas a partir de agora.
+  // Existe para exibir corretamente "quem" cancelou/alterou (Missão 0005.8, seção 7) sem
+  // depender do papel atual do usuário, que pode mudar depois da ação.
+  changedByRole   Role?
   reason          String?
   changedAt       DateTime           @default(now())
 

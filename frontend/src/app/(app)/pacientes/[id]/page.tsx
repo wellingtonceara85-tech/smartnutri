@@ -14,8 +14,10 @@ import { PatientEvolutionTab } from '@/components/patient-evolution-tab';
 import { PatientFoodDiaryTab } from '@/components/patient-food-diary-tab';
 import { PatientMealPlanTab } from '@/components/patient-meal-plan-tab';
 import { PatientStatusBadge } from '@/components/patient-status-badge';
+import { PatientTreatmentCyclesTab } from '@/components/patient-treatment-cycles-tab';
 import { listPatientAppointments } from '@/lib/api/appointments';
 import { getPatient } from '@/lib/api/patients';
+import { listPatientTreatmentCycles } from '@/lib/api/treatment-cycles';
 import { ApiError } from '@/lib/api-client';
 import { useTenantAuth } from '@/lib/auth-context';
 import { formatAppointmentDateTime } from '@/lib/appointment-datetime';
@@ -63,6 +65,12 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
     enabled: !!accessToken,
   });
 
+  const treatmentCyclesQuery = useQuery({
+    queryKey: ['patient-treatment-cycles', id],
+    queryFn: () => listPatientTreatmentCycles(accessToken!, id),
+    enabled: !!accessToken,
+  });
+
   if (patientQuery.isLoading) {
     return (
       <div className="flex flex-col gap-4">
@@ -88,6 +96,7 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
   const whatsapp = patient.whatsappPhone ?? patient.primaryPhone;
 
   const appointments = appointmentsQuery.data ?? [];
+  const activeCycle = (treatmentCyclesQuery.data ?? []).find((c) => c.status === 'ACTIVE');
   const nowIso = new Date().toISOString();
   const nextAppointment = appointments
     .filter((a) => a.scheduledAt >= nowIso && !['CANCELLED_BY_CLINIC', 'CANCELLED_BY_PATIENT', 'RESCHEDULED'].includes(a.status))
@@ -163,7 +172,18 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Plano atual</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">Não disponível</CardContent>
+              <CardContent className="text-sm text-muted-foreground">
+                {activeCycle ? (
+                  <>
+                    <p className="text-foreground">{activeCycle.plan.name}</p>
+                    <p>
+                      {activeCycle._count.appointments} de {activeCycle.appointmentCountPlanned} consultas
+                    </p>
+                  </>
+                ) : (
+                  'Nenhum plano ativo'
+                )}
+              </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
@@ -234,7 +254,7 @@ export default function PacienteDetailPage({ params }: { params: Promise<{ id: s
         </TabsContent>
 
         <TabsContent value="cycles">
-          <EmptyTab message="Nenhum ciclo de acompanhamento cadastrado ainda — disponível em uma próxima etapa." />
+          <PatientTreatmentCyclesTab patientId={patient.id} />
         </TabsContent>
         <TabsContent value="appointments">
           <PatientAppointmentsTab patientId={patient.id} />

@@ -34,7 +34,7 @@ import {
   todayLocalDateKey,
 } from '@/lib/appointment-datetime';
 import { buildWhatsAppLink, formatAge, formatCalendarDate, maskPhone } from '@/lib/masks';
-import { APPOINTMENT_MODALITY_LABELS } from '@/lib/types';
+import { APPOINTMENT_MODALITY_LABELS, APPOINTMENT_STATUS_LABELS, PLATFORM_ROLE_LABELS } from '@/lib/types';
 
 type ActionMode = 'view' | 'cancel' | 'reschedule' | 'noshow' | 'complete';
 
@@ -53,7 +53,9 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
   const [busy, setBusy] = useState(false);
 
   const [cancelReason, setCancelReason] = useState('');
-  const [cancelledBy, setCancelledBy] = useState<'PATIENT' | 'CLINIC'>('PATIENT');
+  // Sem valor padrão de propósito (bug da Missão 0005.8, seção 7) — quem cancela precisa
+  // escolher ativamente a origem, nunca herdar "paciente" silenciosamente.
+  const [cancelledBy, setCancelledBy] = useState<'PATIENT' | 'CLINIC' | null>(null);
   const [noShowNotes, setNoShowNotes] = useState('');
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
@@ -78,6 +80,7 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
   function resetActionState() {
     setMode('view');
     setCancelReason('');
+    setCancelledBy(null);
     setNoShowNotes('');
     setRescheduleReason('');
     setCompleteClinicalNotes('');
@@ -129,6 +132,10 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
     if (!accessToken || !appointmentId) return;
     if (!cancelReason.trim()) {
       toast.error('Informe o motivo do cancelamento');
+      return;
+    }
+    if (!cancelledBy) {
+      toast.error('Selecione quem solicitou o cancelamento');
       return;
     }
     setBusy(true);
@@ -254,6 +261,37 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
             <p className="text-sm text-muted-foreground">Nutricionista: {appointment.nutritionistUser.name}</p>
           </div>
 
+          {appointment.treatmentCycle && appointment.sequenceNumber !== null ? (
+            <div
+              className={
+                appointment.sequenceNumber > appointment.treatmentCycle.appointmentCountPlanned
+                  ? 'rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30'
+                  : 'rounded-lg border p-3 text-sm'
+              }
+            >
+              <p className="font-medium">{appointment.treatmentCycle.plan.name}</p>
+              <p className={appointment.sequenceNumber > appointment.treatmentCycle.appointmentCountPlanned ? 'font-medium text-amber-700 dark:text-amber-500' : 'text-muted-foreground'}>
+                {appointment.sequenceNumber}ª consulta
+                {appointment.sequenceNumber > appointment.treatmentCycle.appointmentCountPlanned
+                  ? ` — excede as ${appointment.treatmentCycle.appointmentCountPlanned} consultas previstas no plano`
+                  : ` de ${appointment.treatmentCycle.appointmentCountPlanned} previstas no plano`}
+              </p>
+            </div>
+          ) : (
+            appointment.standaloneValue && (
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="text-xs text-muted-foreground">Consulta avulsa</p>
+                <p>
+                  {Number(appointment.standaloneValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {appointment.standaloneFinalValue &&
+                    Number(appointment.standaloneFinalValue) !== Number(appointment.standaloneValue) &&
+                    ` → valor final ${Number(appointment.standaloneFinalValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
+                  {appointment.standalonePaymentMethod && ` · ${appointment.standalonePaymentMethod.name}`}
+                </p>
+              </div>
+            )
+          )}
+
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-muted-foreground">Tipo</p>
@@ -345,23 +383,32 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
           {mode === 'cancel' && (
             <div className="flex flex-col gap-3 rounded-lg border p-3">
               <p className="text-sm font-medium">Cancelar consulta</p>
-              <div className="flex gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={cancelledBy === 'PATIENT' ? 'default' : 'outline'}
-                  onClick={() => setCancelledBy('PATIENT')}
-                >
-                  Cancelada pelo paciente
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={cancelledBy === 'CLINIC' ? 'default' : 'outline'}
-                  onClick={() => setCancelledBy('CLINIC')}
-                >
-                  Cancelada pela profissional
-                </Button>
+              <div className="flex flex-col gap-1.5">
+                <Label>Quem solicitou o cancelamento? *</Label>
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={cancelledBy === 'PATIENT' ? 'default' : 'outline'}
+                    onClick={() => setCancelledBy('PATIENT')}
+                  >
+                    O paciente
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={cancelledBy === 'CLINIC' ? 'default' : 'outline'}
+                    onClick={() => setCancelledBy('CLINIC')}
+                  >
+                    A clínica
+                  </Button>
+                </div>
+                {cancelledBy === null && (
+                  <p className="text-xs text-muted-foreground">
+                    Isso define se a consulta aparece como &quot;cancelada pelo paciente&quot; ou &quot;cancelada pela
+                    clínica&quot; — quem executou a ação fica sempre registrado abaixo, independente dessa escolha.
+                  </p>
+                )}
               </div>
               <Label htmlFor="cancel-reason">Motivo</Label>
               <Textarea id="cancel-reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
@@ -369,7 +416,13 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
                 <Button type="button" variant="outline" size="sm" onClick={resetActionState}>
                   Voltar
                 </Button>
-                <Button type="button" size="sm" variant="destructive" onClick={handleCancelSubmit} disabled={busy}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleCancelSubmit}
+                  disabled={busy || !cancelledBy || !cancelReason.trim()}
+                >
                   Confirmar cancelamento
                 </Button>
               </div>
@@ -480,8 +533,11 @@ export function AppointmentDetailDialog({ open, onOpenChange, appointmentId }: A
                 {appointment.statusHistory.map((entry) => (
                   <div key={entry.id} className="flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="outline">{entry.toStatus}</Badge>
-                      <span className="text-muted-foreground">{entry.changedByUser.name}</span>
+                      <Badge variant="outline">{APPOINTMENT_STATUS_LABELS[entry.toStatus]}</Badge>
+                      <span className="text-muted-foreground">
+                        {entry.changedByUser.name}
+                        {entry.changedByRole && ` (${PLATFORM_ROLE_LABELS[entry.changedByRole]})`}
+                      </span>
                     </div>
                     <span className="text-muted-foreground">{formatAppointmentDateTime(entry.changedAt)}</span>
                   </div>

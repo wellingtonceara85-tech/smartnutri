@@ -67,7 +67,7 @@ export interface PatientDetail {
   status: PatientStatus;
   createdAt: string;
   updatedAt: string;
-  treatmentCycles: unknown[];
+  treatmentCycles: TreatmentCycle[];
   appointments: unknown[];
   charges: unknown[];
   patientEvolutions: unknown[];
@@ -147,6 +147,84 @@ export interface PlanFormValues {
   allowsDiscount?: boolean;
   isActive?: boolean;
   notes?: string;
+}
+
+export type DiscountType = 'FIXED' | 'PERCENTAGE';
+
+export const DISCOUNT_TYPE_LABELS: Record<DiscountType, string> = {
+  FIXED: 'R$',
+  PERCENTAGE: '%',
+};
+
+export type CycleStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'RENEWED';
+
+export const CYCLE_STATUS_LABELS: Record<CycleStatus, string> = {
+  DRAFT: 'Rascunho',
+  ACTIVE: 'Ativo',
+  PAUSED: 'Pausado',
+  COMPLETED: 'Concluído',
+  CANCELLED: 'Cancelado',
+  RENEWED: 'Renovado',
+};
+
+export interface PaymentMethod {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface TreatmentCycle {
+  id: string;
+  cycleNumber: number;
+  status: CycleStatus;
+  startDate: string;
+  expectedEndDate: string | null;
+  actualEndDate: string | null;
+  appointmentCountPlanned: number;
+  intervalDaysPlanned: number;
+  contractedValue: string;
+  discountType: DiscountType;
+  discountValue: string;
+  discount: string;
+  surcharge: string;
+  finalValue: string;
+  downPayment: string;
+  installmentCount: number;
+  notes: string | null;
+  closureReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  plan: { id: string; name: string; defaultPrice: string; allowsDiscount: boolean };
+  paymentMethod: { id: string; name: string } | null;
+  createdByUser: { id: string; name: string };
+  _count: { appointments: number };
+}
+
+export interface CreateTreatmentCyclePayload {
+  planId: string;
+  startDate: string;
+  discountType?: DiscountType;
+  discountValue?: number;
+  paymentMethodId?: string;
+  downPayment?: number;
+  installmentCount?: number;
+  notes?: string;
+}
+
+export interface UpdateTreatmentCyclePayload {
+  expectedEndDate?: string;
+  notes?: string;
+}
+
+/** Correção de valores já contratados — `reason` obrigatório, auditado no backend (Missão 0005.8, ajuste final). */
+export interface UpdateTreatmentCycleFinancialsPayload {
+  contractedValue?: number;
+  discountType?: DiscountType;
+  discountValue?: number;
+  paymentMethodId?: string | null;
+  downPayment?: number;
+  installmentCount?: number;
+  reason: string;
 }
 
 export interface NutritionistOption {
@@ -443,7 +521,7 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
   CONFIRMED: 'Confirmada',
   IN_PROGRESS: 'Em atendimento',
   DONE: 'Realizada',
-  CANCELLED_BY_CLINIC: 'Cancelada pela profissional',
+  CANCELLED_BY_CLINIC: 'Cancelada pela clínica',
   CANCELLED_BY_PATIENT: 'Cancelada pelo paciente',
   NO_SHOW: 'Não compareceu',
   RESCHEDULED: 'Reagendada',
@@ -468,6 +546,8 @@ export interface AppointmentStatusHistoryEntry {
   toStatus: AppointmentStatus;
   reason: string | null;
   changedAt: string;
+  /** Papel de quem executou a ação no momento em que ela ocorreu — null em histórico anterior à Missão 0005.8. */
+  changedByRole: PlatformRole | null;
   changedByUser: { id: string; name: string };
 }
 
@@ -503,6 +583,18 @@ export interface Appointment {
   rescheduledIntoAppointment: { id: string; scheduledAt: string } | null;
   statusHistory: AppointmentStatusHistoryEntry[];
   patientEvolutions: { id: string; assessmentDate: string; title: string | null }[];
+  sequenceNumber: number | null;
+  treatmentCycle: {
+    id: string;
+    cycleNumber: number;
+    appointmentCountPlanned: number;
+    plan: { id: string; name: string };
+  } | null;
+  standaloneValue: string | null;
+  standaloneDiscountType: DiscountType | null;
+  standaloneDiscountValue: string | null;
+  standaloneFinalValue: string | null;
+  standalonePaymentMethod: { id: string; name: string } | null;
 }
 
 export interface CreateAppointmentPayload {
@@ -516,6 +608,11 @@ export interface CreateAppointmentPayload {
   onlineMeetingUrl?: string;
   adminNotes?: string;
   isConfirmed: boolean;
+  treatmentCycleId?: string;
+  standaloneValue?: number;
+  standaloneDiscountType?: DiscountType;
+  standaloneDiscountValue?: number;
+  standalonePaymentMethodId?: string;
 }
 
 export interface UpdateAppointmentPayload {

@@ -11,7 +11,7 @@ async function getHandler(): Promise<ExpressHandler> {
     await app.init();
     cachedHandler = app.getHttpAdapter().getInstance() as ExpressHandler;
   }
-  return cachedHandler as ExpressHandler;
+  return cachedHandler;
 }
 
 export const api = onRequest(

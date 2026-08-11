@@ -13,11 +13,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { createPatient, updatePatient, updatePatientStatus } from '@/lib/api/patients';
+import { listPaymentMethods } from '@/lib/api/payment-methods';
+import { listPlans } from '@/lib/api/plans';
+import { createTreatmentCycle } from '@/lib/api/treatment-cycles';
 import { listNutritionists } from '@/lib/api/users';
 import { ApiError } from '@/lib/api-client';
 import { useTenantAuth } from '@/lib/auth-context';
 import { BRAZILIAN_STATES } from '@/lib/brazilian-states';
 import { isValidCpf } from '@/lib/cpf';
+import { todayLocalDateKey } from '@/lib/appointment-datetime';
 import { maskCep, maskCpf, maskPhone } from '@/lib/masks';
 import { GENDER_LABELS, PATIENT_STATUS_LABELS, type PatientDetail } from '@/lib/types';
 
@@ -47,6 +51,13 @@ const patientSchema = z.object({
   source: optionalString,
   responsibleNutritionistId: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'PAUSED', 'DISCHARGED', 'ARCHIVED']).optional(),
+  // Plano inicial (só usado no modo "create" — não é atributo do Patient, vira uma
+  // TreatmentCycle separada logo após o cadastro, seção 3 da Missão 0005.8).
+  initialPlanId: z.string().optional(),
+  initialPlanStartDate: optionalString,
+  initialPlanDiscountType: z.enum(['FIXED', 'PERCENTAGE']).optional(),
+  initialPlanDiscountValue: optionalString,
+  initialPlanPaymentMethodId: z.string().optional(),
 });
 
 type PatientFormSchema = z.infer<typeof patientSchema>;
@@ -54,7 +65,13 @@ type PatientFormSchema = z.infer<typeof patientSchema>;
 const NONE_VALUE = 'NONE';
 
 function toFormValues(patient?: PatientDetail): Partial<PatientFormSchema> {
-  if (!patient) return { fullName: '' };
+  if (!patient) {
+    return {
+      fullName: '',
+      initialPlanStartDate: todayLocalDateKey(),
+      initialPlanDiscountType: 'PERCENTAGE',
+    };
+  }
   return {
     fullName: patient.fullName,
     socialName: patient.socialName ?? '',
@@ -97,17 +114,34 @@ export function PatientForm({ mode, patient }: PatientFormProps) {
     enabled: !!accessToken,
   });
 
+  const plansQuery = useQuery({
+    queryKey: ['plans', { isActive: true }],
+    queryFn: () => listPlans(accessToken!, { isActive: true, pageSize: 100 }),
+    enabled: !!accessToken && mode === 'create',
+  });
+  const paymentMethodsQuery = useQuery({
+    queryKey: ['payment-methods'],
+    queryFn: () => listPaymentMethods(accessToken!),
+    enabled: !!accessToken && mode === 'create',
+  });
+
   const canChangeStatus = mode === 'edit' && (user?.role === 'ADMIN' || user?.role === 'RECEPTION');
 
   const {
     register,
     control,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<PatientFormSchema>({
     resolver: zodResolver(patientSchema),
     defaultValues: toFormValues(patient),
   });
+
+  const initialPlanId = watch('initialPlanId');
+  const initialPlanDiscountType = watch('initialPlanDiscountType');
+  const selectedInitialPlan = plansQuery.data?.data.find((p) => p.id === initialPlanId);
 
   async function onSubmit(values: PatientFormSchema) {
     if (!accessToken) return;
@@ -119,6 +153,11 @@ export function PatientForm({ mode, patient }: PatientFormProps) {
       responsibleNutritionistId: values.responsibleNutritionistId === NONE_VALUE ? undefined : values.responsibleNutritionistId,
     };
     delete (payload as Record<string, unknown>).status;
+    delete (payload as Record<string, unknown>).initialPlanId;
+    delete (payload as Record<string, unknown>).initialPlanStartDate;
+    delete (payload as Record<string, unknown>).initialPlanDiscountType;
+    delete (payload as Record<string, unknown>).initialPlanDiscountValue;
+    delete (payload as Record<string, unknown>).initialPlanPaymentMethodId;
     // Campos opcionais vazios viram '' pelo react-hook-form, mas o backend
     // rejeita '' em campos com validador de formato (ex.: @IsEmail) mesmo com @IsOptional.
     for (const key of Object.keys(payload) as (keyof typeof payload)[]) {
@@ -130,7 +169,28 @@ export function PatientForm({ mode, patient }: PatientFormProps) {
     try {
       if (mode === 'create') {
         const created = await createPatient(accessToken, payload);
-        toast.success('Paciente cadastrado com sucesso');
+        if (values.initialPlanId) {
+          try {
+            await createTreatmentCycle(accessToken, created.id, {
+              planId: values.initialPlanId,
+              startDate: values.initialPlanStartDate || todayLocalDateKey(),
+              discountType: values.initialPlanDiscountType,
+              discountValue: values.initialPlanDiscountValue ? Number(values.initialPlanDiscountValue) : undefined,
+              paymentMethodId: values.initialPlanPaymentMethodId || undefined,
+            });
+            toast.success('Paciente cadastrado e plano inicial contratado');
+          } catch (cycleError) {
+            // Paciente já foi criado com sucesso — a contratação falhou à parte, sem
+            // desfazer o cadastro. A equipe registra o plano depois pela ficha do paciente.
+            toast.error(
+              cycleError instanceof ApiError
+                ? `Paciente cadastrado, mas não foi possível registrar o plano inicial: ${cycleError.message}`
+                : 'Paciente cadastrado, mas não foi possível registrar o plano inicial',
+            );
+          }
+        } else {
+          toast.success('Paciente cadastrado com sucesso');
+        }
         router.push(`/pacientes/${created.id}`);
       } else if (patient) {
         await updatePatient(accessToken, patient.id, payload);
@@ -368,6 +428,116 @@ export function PatientForm({ mode, patient }: PatientFormProps) {
           )}
         </CardContent>
       </Card>
+
+      {mode === 'create' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Plano inicial</CardTitle>
+            <CardDescription>Opcional — deixe em branco para cadastrar sem plano e contratar depois pela ficha do paciente</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label>Plano</Label>
+              <Controller
+                control={control}
+                name="initialPlanId"
+                render={({ field }) => (
+                  <Select value={field.value ?? NONE_VALUE} onValueChange={(v) => field.onChange(v === NONE_VALUE ? undefined : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione">
+                        {(value: string) =>
+                          value === NONE_VALUE ? 'Nenhum plano' : (plansQuery.data?.data.find((p) => p.id === value)?.name ?? '')
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>Nenhum plano</SelectItem>
+                      {plansQuery.data?.data.map((plan) => (
+                        <SelectItem key={plan.id} value={plan.id}>
+                          {plan.name} — {Number(plan.defaultPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            {initialPlanId && (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="initialPlanStartDate">Data de início</Label>
+                  <Input id="initialPlanStartDate" type="date" {...register('initialPlanStartDate')} />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label>Forma de pagamento</Label>
+                  <Controller
+                    control={control}
+                    name="initialPlanPaymentMethodId"
+                    render={({ field }) => (
+                      <Select value={field.value ?? NONE_VALUE} onValueChange={(v) => field.onChange(v === NONE_VALUE ? undefined : v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione (opcional)">
+                            {(value: string) =>
+                              value === NONE_VALUE
+                                ? 'Não informado'
+                                : (paymentMethodsQuery.data?.find((m) => m.id === value)?.name ?? '')
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE_VALUE}>Não informado</SelectItem>
+                          {paymentMethodsQuery.data?.map((method) => (
+                            <SelectItem key={method.id} value={method.id}>
+                              {method.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+                <div className="flex flex-col gap-2 sm:col-span-2">
+                  <Label>Desconto</Label>
+                  <div className="flex gap-2">
+                    <div className="flex gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={initialPlanDiscountType === 'FIXED' ? 'default' : 'outline'}
+                        onClick={() => setValue('initialPlanDiscountType', 'FIXED')}
+                        disabled={selectedInitialPlan ? !selectedInitialPlan.allowsDiscount : false}
+                      >
+                        R$
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={initialPlanDiscountType === 'PERCENTAGE' ? 'default' : 'outline'}
+                        onClick={() => setValue('initialPlanDiscountType', 'PERCENTAGE')}
+                        disabled={selectedInitialPlan ? !selectedInitialPlan.allowsDiscount : false}
+                      >
+                        %
+                      </Button>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="flex-1"
+                      disabled={selectedInitialPlan ? !selectedInitialPlan.allowsDiscount : false}
+                      {...register('initialPlanDiscountValue')}
+                    />
+                  </div>
+                  {selectedInitialPlan && !selectedInitialPlan.allowsDiscount && (
+                    <p className="text-xs text-muted-foreground">Este plano não permite desconto.</p>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

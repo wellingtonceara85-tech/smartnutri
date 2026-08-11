@@ -29,6 +29,8 @@ describe('AppointmentsService (integração)', () => {
   let patientA: { id: string };
   let patientB: { id: string };
   let typeA: { id: string };
+  let planA: { id: string; defaultPrice: unknown };
+  let paymentMethodA: { id: string };
 
   const runId = Date.now();
   const baseDay = '2026-09-14'; // segunda-feira fictícia, só para os testes
@@ -129,6 +131,21 @@ describe('AppointmentsService (integração)', () => {
         defaultDurationMinutes: 40,
       },
     });
+
+    planA = await prisma.plan.create({
+      data: {
+        tenantId: tenantA.id,
+        name: 'Plano Teste Appt',
+        durationMonths: 3,
+        suggestedAppointments: 2,
+        suggestedIntervalDays: 30,
+        defaultPrice: 900,
+        defaultInstallments: 3,
+      },
+    });
+    paymentMethodA = await prisma.paymentMethod.create({
+      data: { tenantId: tenantA.id, name: 'PIX Teste Appt' },
+    });
   }, 30000);
 
   afterAll(async () => {
@@ -142,6 +159,11 @@ describe('AppointmentsService (integração)', () => {
       where: { tenantId: { in: [tenantA.id, tenantB.id] } },
     });
     await prisma.appointmentType.deleteMany({
+      where: { tenantId: { in: [tenantA.id, tenantB.id] } },
+    });
+    // TreatmentCycle.createdByUserId não tem onDelete: Cascade (RESTRICT por
+    // padrão) — precisa sumir antes de apagarmos os usuários de teste abaixo.
+    await prisma.treatmentCycle.deleteMany({
       where: { tenantId: { in: [tenantA.id, tenantB.id] } },
     });
     await prisma.patient.deleteMany({
@@ -787,5 +809,216 @@ describe('AppointmentsService (integração)', () => {
       endDate: '2026-09-24T23:59:59.000Z',
     });
     expect(nextDay.map((a) => a.id)).not.toContain(created.id);
+  });
+
+  // ---------------------------------------------------------------------
+  // Missão 0005.8: vínculo com ciclo de tratamento, preço avulso, autoria
+  // ---------------------------------------------------------------------
+
+  it('vincula consulta a um ciclo ativo e numera a sequência (consulta 1 de N, depois 2 de N)', async () => {
+    const patient = await prisma.patient.create({
+      data: { tenantId: tenantA.id, fullName: 'Paciente Ciclo Appt' },
+    });
+    const cycle = await prisma.treatmentCycle.create({
+      data: {
+        tenantId: tenantA.id,
+        patientId: patient.id,
+        planId: planA.id,
+        cycleNumber: 1,
+        status: 'ACTIVE',
+        startDate: new Date('2026-01-01'),
+        appointmentCountPlanned: 2,
+        intervalDaysPlanned: 30,
+        contractedValue: 900,
+        finalValue: 900,
+        installmentCount: 1,
+        createdByUserId: nutritionistA.id,
+      },
+    });
+
+    const first = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      baseDto({
+        patientId: patient.id,
+        treatmentCycleId: cycle.id,
+        scheduledAt: '2026-09-25T14:00:00.000Z',
+      }),
+    );
+    const second = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      baseDto({
+        patientId: patient.id,
+        treatmentCycleId: cycle.id,
+        scheduledAt: '2026-09-26T14:00:00.000Z',
+      }),
+    );
+
+    expect(first.sequenceNumber).toBe(1);
+    expect(second.sequenceNumber).toBe(2);
+    expect(first.treatmentCycle?.id).toBe(cycle.id);
+    expect(first.treatmentCycle?.plan.name).toBe('Plano Teste Appt');
+  });
+
+  it('rejeita vincular consulta a um ciclo que não está ativo', async () => {
+    const patient = await prisma.patient.create({
+      data: { tenantId: tenantA.id, fullName: 'Paciente Ciclo Pausado Appt' },
+    });
+    const pausedCycle = await prisma.treatmentCycle.create({
+      data: {
+        tenantId: tenantA.id,
+        patientId: patient.id,
+        planId: planA.id,
+        cycleNumber: 1,
+        status: 'PAUSED',
+        startDate: new Date('2026-01-01'),
+        appointmentCountPlanned: 2,
+        intervalDaysPlanned: 30,
+        contractedValue: 900,
+        finalValue: 900,
+        installmentCount: 1,
+        createdByUserId: nutritionistA.id,
+      },
+    });
+
+    await expect(
+      service.create(
+        tenantA.id,
+        nutritionistA.id,
+        Role.NUTRITIONIST,
+        baseDto({
+          patientId: patient.id,
+          treatmentCycleId: pausedCycle.id,
+          scheduledAt: '2026-09-27T14:00:00.000Z',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejeita informar treatmentCycleId junto com valor avulso', async () => {
+    const patient = await prisma.patient.create({
+      data: { tenantId: tenantA.id, fullName: 'Paciente Conflito Appt' },
+    });
+    const cycle = await prisma.treatmentCycle.create({
+      data: {
+        tenantId: tenantA.id,
+        patientId: patient.id,
+        planId: planA.id,
+        cycleNumber: 1,
+        status: 'ACTIVE',
+        startDate: new Date('2026-01-01'),
+        appointmentCountPlanned: 2,
+        intervalDaysPlanned: 30,
+        contractedValue: 900,
+        finalValue: 900,
+        installmentCount: 1,
+        createdByUserId: nutritionistA.id,
+      },
+    });
+
+    await expect(
+      service.create(
+        tenantA.id,
+        nutritionistA.id,
+        Role.NUTRITIONIST,
+        baseDto({
+          patientId: patient.id,
+          treatmentCycleId: cycle.id,
+          standaloneValue: 150,
+          scheduledAt: '2026-09-28T14:00:00.000Z',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('calcula standaloneFinalValue no servidor para consulta avulsa com desconto percentual', async () => {
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      baseDto({
+        scheduledAt: '2026-09-29T14:00:00.000Z',
+        standaloneValue: 200,
+        standaloneDiscountType: 'PERCENTAGE',
+        standaloneDiscountValue: 10,
+        standalonePaymentMethodId: paymentMethodA.id,
+      }),
+    );
+    expect(created.standaloneValue?.toString()).toBe('200');
+    expect(created.standaloneFinalValue?.toString()).toBe('180');
+    expect(created.standalonePaymentMethod?.id).toBe(paymentMethodA.id);
+  });
+
+  it('consulta avulsa sem desconto informado usa o próprio valor como final', async () => {
+    const created = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      baseDto({
+        scheduledAt: '2026-09-30T14:00:00.000Z',
+        standaloneValue: 150,
+      }),
+    );
+    expect(created.standaloneFinalValue?.toString()).toBe('150');
+  });
+
+  it('registra o papel real de quem cancelou no histórico (changedByRole), corrigindo o bug de autoria', async () => {
+    const created = await service.create(
+      tenantA.id,
+      adminA.id,
+      Role.ADMIN,
+      baseDto({ scheduledAt: '2026-10-01T14:00:00.000Z' }),
+    );
+
+    await service.cancel(tenantA.id, adminA.id, Role.ADMIN, created.id, {
+      reason: 'Teste de autoria',
+      // Um ADMIN registrando que foi o paciente quem pediu o cancelamento —
+      // a origem (quem pediu) e quem executou (changedByRole) são coisas
+      // diferentes; o bug era a UI nunca expor/exigir essa escolha (ver
+      // relatório da Missão 0005.8). O backend deve sempre gravar o papel
+      // real de quem chamou o endpoint.
+      cancelledBy: 'PATIENT',
+    });
+
+    const cancelHistoryEntry = await prisma.appointmentStatusHistory.findFirst({
+      where: {
+        appointmentId: created.id,
+        toStatus: AppointmentStatus.CANCELLED_BY_PATIENT,
+      },
+    });
+    expect(cancelHistoryEntry?.changedByUserId).toBe(adminA.id);
+    expect(cancelHistoryEntry?.changedByRole).toBe(Role.ADMIN);
+  });
+
+  it('reagendar preserva o vínculo com o ciclo, sequenceNumber e valores avulsos da consulta original', async () => {
+    const patient = await prisma.patient.create({
+      data: { tenantId: tenantA.id, fullName: 'Paciente Reagenda Ciclo Appt' },
+    });
+    const original = await service.create(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      baseDto({
+        patientId: patient.id,
+        scheduledAt: '2026-10-02T14:00:00.000Z',
+        standaloneValue: 250,
+        standaloneDiscountType: 'FIXED',
+        standaloneDiscountValue: 50,
+      }),
+    );
+
+    const rescheduled = await service.reschedule(
+      tenantA.id,
+      nutritionistA.id,
+      Role.NUTRITIONIST,
+      original.id,
+      { newScheduledAt: '2026-10-03T14:00:00.000Z' },
+    );
+
+    expect(rescheduled.standaloneValue?.toString()).toBe('250');
+    expect(rescheduled.standaloneFinalValue?.toString()).toBe('200');
   });
 });
