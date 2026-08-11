@@ -207,7 +207,11 @@ function AgendaPageContent() {
           {showNutritionistFilter && (
             <Select value={nutritionistFilter} onValueChange={(v) => setNutritionistFilter(v ?? 'ALL')}>
               <SelectTrigger size="sm">
-                <SelectValue placeholder="Nutricionista" />
+                <SelectValue placeholder="Nutricionista">
+                  {(v: string) =>
+                    v === 'ALL' ? 'Todos os nutricionistas' : (nutritionistsQuery.data?.find((n) => n.id === v)?.name ?? '')
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Todos os nutricionistas</SelectItem>
@@ -221,7 +225,9 @@ function AgendaPageContent() {
           )}
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as AppointmentStatus | 'ALL')}>
             <SelectTrigger size="sm">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder="Status">
+                {(v: string) => (v === 'ALL' ? 'Todos os status' : APPOINTMENT_STATUS_LABELS[v as AppointmentStatus])}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Todos os status</SelectItem>

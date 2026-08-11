@@ -171,6 +171,17 @@ function AppointmentFormBody({
       : AVULSO_VALUE;
   const selectedCycle = activeCycles.find((c) => c.id === effectiveLink) ?? null;
 
+  function cycleLinkLabel(v: string): string {
+    if (v === AVULSO_VALUE) return 'Avulsa (sem plano)';
+    const cycle = activeCycles.find((c) => c.id === v);
+    if (!cycle) return '';
+    const nextSequence = cycle._count.appointments + 1;
+    const exceeds = nextSequence > cycle.appointmentCountPlanned;
+    return `${cycle.plan.name} — ${nextSequence}ª consulta${
+      exceeds ? ` (excede as ${cycle.appointmentCountPlanned} previstas no plano)` : ` de ${cycle.appointmentCountPlanned}`
+    }`;
+  }
+
   // Nutricionista efetivo: escolha manual > pré-preenchido > único disponível > o próprio ator, nessa ordem — derivado, não sincronizado.
   const nutritionistUserId =
     manualNutritionistId ??
@@ -315,7 +326,9 @@ function AppointmentFormBody({
             <Label>Profissional</Label>
             <Select value={nutritionistUserId} onValueChange={(v) => setManualNutritionistId(v)}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Selecione" />
+                <SelectValue placeholder="Selecione">
+                  {(v: string) => nutritionistsQuery.data?.find((n) => n.id === v)?.name ?? ''}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {nutritionistsQuery.data.map((n) => (
@@ -381,7 +394,9 @@ function AppointmentFormBody({
           <Label>Tipo de consulta</Label>
           <Select value={appointmentTypeId} onValueChange={handleTypeChange}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione" />
+              <SelectValue placeholder="Selecione">
+                {(v: string) => typesQuery.data?.find((t) => t.id === v)?.name ?? ''}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {typesQuery.data?.map((t) => (
@@ -400,21 +415,14 @@ function AppointmentFormBody({
                 <Label>Cobrança</Label>
                 <Select value={effectiveLink} onValueChange={(v) => v && setLinkChoice(v)}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder="Selecione">{(v: string) => cycleLinkLabel(v)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {activeCycles.map((cycle) => {
-                      const nextSequence = cycle._count.appointments + 1;
-                      const exceeds = nextSequence > cycle.appointmentCountPlanned;
-                      return (
-                        <SelectItem key={cycle.id} value={cycle.id}>
-                          {cycle.plan.name} — {nextSequence}ª consulta
-                          {exceeds
-                            ? ` (excede as ${cycle.appointmentCountPlanned} previstas no plano)`
-                            : ` de ${cycle.appointmentCountPlanned}`}
-                        </SelectItem>
-                      );
-                    })}
+                    {activeCycles.map((cycle) => (
+                      <SelectItem key={cycle.id} value={cycle.id}>
+                        {cycleLinkLabel(cycle.id)}
+                      </SelectItem>
+                    ))}
                     <SelectItem value={AVULSO_VALUE}>Avulsa (sem plano)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -456,7 +464,9 @@ function AppointmentFormBody({
                     onValueChange={(v) => setStandalonePaymentMethodId(v)}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Forma de pagamento" />
+                      <SelectValue placeholder="Forma de pagamento">
+                        {(v: string) => paymentMethodsQuery.data?.find((m) => m.id === v)?.name ?? ''}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {paymentMethodsQuery.data?.map((method) => (

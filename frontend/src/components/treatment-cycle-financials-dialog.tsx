@@ -186,7 +186,9 @@ function TreatmentCycleFinancialsBody({
             onValueChange={(v) => setValue('paymentMethodId', v ?? undefined)}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione (opcional)" />
+              <SelectValue placeholder="Selecione (opcional)">
+                {(v: string) => paymentMethodsQuery.data?.find((m) => m.id === v)?.name ?? ''}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {paymentMethodsQuery.data?.map((method) => (

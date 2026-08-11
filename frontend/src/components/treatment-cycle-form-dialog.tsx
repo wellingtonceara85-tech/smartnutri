@@ -155,7 +155,12 @@ function TreatmentCycleFormBody({
             onValueChange={(v) => v && setValue('planId', v, { shouldValidate: true })}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione um plano" />
+              <SelectValue placeholder="Selecione um plano">
+                {(v: string) => {
+                  const plan = plansQuery.data?.data.find((p) => p.id === v);
+                  return plan ? `${plan.name} — ${currencyFormat(Number(plan.defaultPrice))}` : '';
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {plansQuery.data?.data.map((plan) => (
@@ -219,7 +224,9 @@ function TreatmentCycleFormBody({
             onValueChange={(v) => setValue('paymentMethodId', v ?? undefined)}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione (opcional)" />
+              <SelectValue placeholder="Selecione (opcional)">
+                {(v: string) => paymentMethodsQuery.data?.find((m) => m.id === v)?.name ?? ''}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {paymentMethodsQuery.data?.map((method) => (
