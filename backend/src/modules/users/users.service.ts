@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -17,6 +18,7 @@ import {
   Role,
   Tenant,
 } from '../../generated/prisma/client';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -307,6 +309,45 @@ export class UsersService {
     });
 
     return temporaryPassword;
+  }
+
+  /**
+   * Autosserviço: o próprio usuário troca a senha (Missão 0006.4), sempre exigindo a senha
+   * atual — nunca acessível para outro usuário, mesmo ADMIN (isso continua sendo o
+   * reset-password acima, que gera uma senha nova em vez de exigir a antiga).
+   */
+  async changeOwnPassword(
+    tenantId: string,
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.getForTenant(tenantId, userId);
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+
+    const currentPasswordMatches = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!currentPasswordMatches) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    await this.audit.log({
+      tenantId,
+      actorUserId: userId,
+      entityType: 'User',
+      entityId: userId,
+      action: AuditAction.UPDATE,
+      metadata: { changeType: 'PASSWORD_CHANGE_SELF' },
+    });
   }
 
   private async requireTenant(tenantId: string): Promise<Tenant> {

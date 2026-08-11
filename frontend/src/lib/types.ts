@@ -1229,3 +1229,12 @@ export interface RegisterPaymentPayload {
   paidAt?: string;
   referenceNote?: string;
 }
+
+// ---------------------------------------------------------------------
+// Alterar minha senha (Missão 0006.4)
+// ---------------------------------------------------------------------
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}

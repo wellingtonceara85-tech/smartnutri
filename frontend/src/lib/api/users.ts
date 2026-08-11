@@ -1,5 +1,6 @@
 import { apiFetch } from '../api-client';
 import type {
+  ChangePasswordPayload,
   CreateTeamMemberFormValues,
   CreateTeamMemberResponse,
   NutritionistOption,
@@ -55,5 +56,13 @@ export function deactivateTeamMember(accessToken: string, userId: string) {
   return apiFetch<TeamMember>(`/users/${userId}`, {
     method: 'DELETE',
     accessToken,
+  });
+}
+
+export function changeOwnPassword(accessToken: string, data: ChangePasswordPayload) {
+  return apiFetch<{ status: string }>('/users/me/change-password', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(data),
   });
 }

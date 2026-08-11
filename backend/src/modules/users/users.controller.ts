@@ -13,6 +13,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../generated/prisma/client';
 import type { AuthenticatedUser } from '../../common/types/auth-request';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -49,6 +50,18 @@ export class UsersController {
   @Get('nutritionists')
   listNutritionists(@CurrentTenant() tenantId: string) {
     return this.usersService.listNutritionistsForTenant(tenantId);
+  }
+
+  /** Autosserviço — qualquer papel autenticado troca a própria senha, sempre exigindo a atual. */
+  @Post('me/change-password')
+  changeOwnPassword(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.usersService
+      .changeOwnPassword(tenantId, currentUser.userId, dto)
+      .then(() => ({ status: 'changed' }));
   }
 
   @Get(':id')

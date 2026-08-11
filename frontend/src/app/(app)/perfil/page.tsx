@@ -1,3 +1,4 @@
+import { ChangePasswordForm } from '@/components/change-password-form';
 import { ProfessionalProfileForm } from '@/components/professional-profile-form';
 
 export default function PerfilPage() {
@@ -10,6 +11,7 @@ export default function PerfilPage() {
         </p>
       </div>
       <ProfessionalProfileForm />
+      <ChangePasswordForm />
     </div>
   );
 }
