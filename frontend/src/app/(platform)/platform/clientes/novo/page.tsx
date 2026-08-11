@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createPlatformTenant, listPlatformPlans } from '@/lib/api/platform';
 import { ApiError } from '@/lib/api-client';
 import { usePlatformAuth } from '@/lib/auth-context';
+import { maskPhone } from '@/lib/masks';
 import type { PlanCode, TenantType } from '@/lib/types';
 
 const TYPE_OPTIONS: { value: TenantType; label: string; description: string }[] = [
@@ -178,7 +179,7 @@ export default function NovoClientePage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="phone">Telefone *</Label>
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+              <Input id="phone" value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))} required />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Situação inicial</Label>
