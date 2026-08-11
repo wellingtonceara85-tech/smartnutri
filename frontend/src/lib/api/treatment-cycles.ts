@@ -2,13 +2,30 @@ import { apiFetch } from '../api-client';
 import type {
   CreateTreatmentCyclePayload,
   CycleStatus,
+  QueryTreatmentCyclesParams,
   TreatmentCycle,
+  TreatmentCycleListResponse,
   UpdateTreatmentCycleFinancialsPayload,
   UpdateTreatmentCyclePayload,
 } from '../types';
 
+function buildQueryString(query: object): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') {
+      params.set(key, String(value));
+    }
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export function listPatientTreatmentCycles(accessToken: string, patientId: string) {
   return apiFetch<TreatmentCycle[]>(`/patients/${patientId}/treatment-cycles`, { accessToken });
+}
+
+export function listTreatmentCycles(accessToken: string, query: QueryTreatmentCyclesParams = {}) {
+  return apiFetch<TreatmentCycleListResponse>(`/treatment-cycles${buildQueryString(query)}`, { accessToken });
 }
 
 export function getTreatmentCycle(accessToken: string, id: string) {

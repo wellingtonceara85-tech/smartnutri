@@ -214,6 +214,35 @@ describe('TreatmentCyclesService (integração)', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('listAll() lista os ciclos do tenant (todos os pacientes) com filtro por status e isolamento entre tenants', async () => {
+    const freshPatient = await prisma.patient.create({
+      data: { tenantId: tenantA.id, fullName: 'Paciente ListAll Ciclos' },
+    });
+    const cycle = await service.create(
+      tenantA.id,
+      actorUserId,
+      freshPatient.id,
+      {
+        planId: planTrimestral.id,
+        startDate: '2026-01-01',
+      },
+    );
+
+    const all = await service.listAll(tenantA.id, {});
+    expect(all.data.some((c) => c.id === cycle.id)).toBe(true);
+    expect(all.data.every((c) => 'patient' in c)).toBe(true);
+
+    const activeOnly = await service.listAll(tenantA.id, {
+      status: CycleStatus.ACTIVE,
+    });
+    expect(activeOnly.data.every((c) => c.status === CycleStatus.ACTIVE)).toBe(
+      true,
+    );
+
+    const fromOtherTenant = await service.listAll(tenantB.id, {});
+    expect(fromOtherTenant.data.some((c) => c.id === cycle.id)).toBe(false);
+  });
+
   it('lista o histórico de contratações de um paciente, mais recente primeiro', async () => {
     const freshPatient = await prisma.patient.create({
       data: { tenantId: tenantA.id, fullName: 'Paciente Histórico Ciclos' },

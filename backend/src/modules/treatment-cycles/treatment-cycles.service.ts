@@ -16,9 +16,16 @@ import {
   Prisma,
 } from '../../generated/prisma/client';
 import { CreateTreatmentCycleDto } from './dto/create-treatment-cycle.dto';
+import { QueryTreatmentCyclesDto } from './dto/query-treatment-cycles.dto';
 import { UpdateTreatmentCycleFinancialsDto } from './dto/update-treatment-cycle-financials.dto';
 import { UpdateTreatmentCycleStatusDto } from './dto/update-treatment-cycle-status.dto';
 import { UpdateTreatmentCycleDto } from './dto/update-treatment-cycle.dto';
+
+const UPCOMING_APPOINTMENT_STATUSES = [
+  'SCHEDULED',
+  'AWAITING_CONFIRMATION',
+  'CONFIRMED',
+] as const;
 
 /** Financeiro não é editável depois que o ciclo já foi encerrado — evita reescrever
  * retroativamente um contrato que já foi concluído/cancelado. */
@@ -63,6 +70,45 @@ export class TreatmentCyclesService {
       include: CYCLE_INCLUDE,
       orderBy: { cycleNumber: 'desc' },
     });
+  }
+
+  /** Visão tenant-wide para a tela "Ciclos" (Missão 0006.2) — mesmo modelo/dados de
+   * sempre, só listados por tenant em vez de por paciente. */
+  async listAll(tenantId: string, query: QueryTreatmentCyclesDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where: Prisma.TreatmentCycleWhereInput = {
+      tenantId,
+      deletedAt: null,
+      status: query.status,
+      patientId: query.patientId,
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.treatmentCycle.findMany({
+        where,
+        include: {
+          ...CYCLE_INCLUDE,
+          patient: { select: { id: true, fullName: true } },
+          appointments: {
+            where: {
+              deletedAt: null,
+              status: { in: [...UPCOMING_APPOINTMENT_STATUSES] },
+              scheduledAt: { gte: new Date() },
+            },
+            orderBy: { scheduledAt: 'asc' },
+            take: 1,
+            select: { id: true, scheduledAt: true },
+          },
+        },
+        orderBy: { startDate: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.treatmentCycle.count({ where }),
+    ]);
+
+    return { data, total, page, pageSize };
   }
 
   async getById(tenantId: string, id: string) {

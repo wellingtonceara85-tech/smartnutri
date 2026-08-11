@@ -200,6 +200,27 @@ export interface TreatmentCycle {
   _count: { appointments: number };
 }
 
+/** Item da listagem tenant-wide (tela "Ciclos", Missão 0006.2) — mesmo TreatmentCycle,
+ * só com o paciente e a próxima consulta (se houver) anexados. */
+export interface TreatmentCycleListItem extends TreatmentCycle {
+  patient: { id: string; fullName: string };
+  appointments: { id: string; scheduledAt: string }[];
+}
+
+export interface TreatmentCycleListResponse {
+  data: TreatmentCycleListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface QueryTreatmentCyclesParams {
+  status?: CycleStatus;
+  patientId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface CreateTreatmentCyclePayload {
   planId: string;
   startDate: string;

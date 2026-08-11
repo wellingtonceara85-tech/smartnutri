@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
@@ -12,6 +13,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../common/types/auth-request';
 import { Role } from '../../generated/prisma/client';
+import { QueryTreatmentCyclesDto } from './dto/query-treatment-cycles.dto';
 import { UpdateTreatmentCycleFinancialsDto } from './dto/update-treatment-cycle-financials.dto';
 import { UpdateTreatmentCycleStatusDto } from './dto/update-treatment-cycle-status.dto';
 import { UpdateTreatmentCycleDto } from './dto/update-treatment-cycle.dto';
@@ -33,6 +35,14 @@ export class TreatmentCyclesController {
   constructor(
     private readonly treatmentCyclesService: TreatmentCyclesService,
   ) {}
+
+  @Get()
+  listAll(
+    @CurrentTenant() tenantId: string,
+    @Query() query: QueryTreatmentCyclesDto,
+  ) {
+    return this.treatmentCyclesService.listAll(tenantId, query);
+  }
 
   @Get(':id')
   getById(
