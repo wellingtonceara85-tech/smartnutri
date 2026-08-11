@@ -1123,3 +1123,88 @@ export interface CreateTeamMemberResponse extends TeamMember {
 export interface ResetTeamMemberPasswordResponse {
   temporaryPassword: string;
 }
+
+// ---------------------------------------------------------------------
+// Financeiro (Missão 0006)
+// ---------------------------------------------------------------------
+
+export type ChargeStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
+
+export const CHARGE_STATUS_LABELS: Record<ChargeStatus, string> = {
+  PENDING: 'Pendente',
+  PARTIALLY_PAID: 'Parcialmente pago',
+  PAID: 'Pago',
+  CANCELLED: 'Cancelado',
+};
+
+export type ChargeStatusFilter = ChargeStatus | 'OVERDUE';
+
+export interface ChargeOrigin {
+  type: 'CYCLE' | 'APPOINTMENT';
+  treatmentCycleId?: string;
+  planName?: string;
+  appointmentId?: string;
+  appointmentTypeName?: string;
+}
+
+export interface Charge {
+  id: string;
+  patient: { id: string; fullName: string };
+  origin: ChargeOrigin | null;
+  installmentNumber: number;
+  installmentTotal: number;
+  description: string | null;
+  amount: string;
+  discount: string;
+  finalValue: string;
+  remaining: string;
+  dueDate: string;
+  status: ChargeStatus;
+  isOverdue: boolean;
+  paymentId: string | null;
+  paymentMethodName: string | null;
+  paidAt: string | null;
+}
+
+export interface ChargeListResponse {
+  data: Charge[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface FinanceSummary {
+  recebidoNoPeriodo: string;
+  aReceber: string;
+  vencido: string;
+  proximosRecebimentos: {
+    chargeId: string;
+    patientName: string;
+    dueDate: string;
+    remaining: string;
+  }[];
+  movimentacoesRecentes: {
+    id: string;
+    patientName: string;
+    amount: string;
+    paymentMethodName: string;
+    paidAt: string;
+  }[];
+}
+
+export interface QueryChargesParams {
+  patientId?: string;
+  status?: ChargeStatusFilter;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface RegisterPaymentPayload {
+  chargeId: string;
+  paymentMethodId: string;
+  amount?: number;
+  paidAt?: string;
+  referenceNote?: string;
+}

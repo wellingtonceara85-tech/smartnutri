@@ -559,10 +559,20 @@ enum ChargeStatus {
   CANCELLED
 }
 
+/**
+ * Origem de uma cobrança: uma parcela de TreatmentCycle (contratação) ou uma
+ * consulta avulsa (Appointment com standaloneValue) — mutuamente exclusivo,
+ * igual ao par treatmentCycleId/standalone* já usado em Appointment (Missão
+ * 0005.8). `treatmentCycleId` é opcional desde a Missão 0006: o modelo
+ * nasceu (migration inicial) assumindo que toda cobrança viria de um ciclo,
+ * mas consulta avulsa nunca tem ciclo — sem essa relaxação, a nutricionista
+ * autônoma (o público principal do Financeiro) não teria cobrança nenhuma
+ * para suas consultas avulsas.
+ */
 model Charge {
   id                String       @id @default(uuid())
   tenantId          String
-  treatmentCycleId  String
+  treatmentCycleId  String?
   patientId         String
   appointmentId     String?
   installmentNumber Int
@@ -580,7 +590,7 @@ model Charge {
   deletedAt         DateTime?
 
   tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  treatmentCycle TreatmentCycle      @relation(fields: [treatmentCycleId], references: [id], onDelete: Cascade)
+  treatmentCycle TreatmentCycle?     @relation(fields: [treatmentCycleId], references: [id], onDelete: Cascade)
   patient        Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
   appointment    Appointment?        @relation(fields: [appointmentId], references: [id])
   allocations    PaymentAllocation[]

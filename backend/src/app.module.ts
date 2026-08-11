@@ -22,6 +22,7 @@ import { FoodDiaryModule } from './modules/food-diary/food-diary.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { PaymentMethodsModule } from './modules/payment-methods/payment-methods.module';
 import { TreatmentCyclesModule } from './modules/treatment-cycles/treatment-cycles.module';
+import { FinanceModule } from './modules/finance/finance.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { TreatmentCyclesModule } from './modules/treatment-cycles/treatment-cycl
     PlatformModule,
     PaymentMethodsModule,
     TreatmentCyclesModule,
+    FinanceModule,
   ],
   controllers: [AppController],
   providers: [

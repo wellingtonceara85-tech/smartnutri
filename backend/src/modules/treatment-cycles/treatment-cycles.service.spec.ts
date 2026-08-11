@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CycleStatus } from '../../generated/prisma/client';
+import { FinanceService } from '../finance/finance.service';
 import { TreatmentCyclesService } from './treatment-cycles.service';
 
 describe('TreatmentCyclesService (integração)', () => {
@@ -22,7 +23,12 @@ describe('TreatmentCyclesService (integração)', () => {
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [TreatmentCyclesService, AuditService, PrismaService],
+      providers: [
+        TreatmentCyclesService,
+        AuditService,
+        PrismaService,
+        FinanceService,
+      ],
     }).compile();
 
     service = moduleRef.get(TreatmentCyclesService);

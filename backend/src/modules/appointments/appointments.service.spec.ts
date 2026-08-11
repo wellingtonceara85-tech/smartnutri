@@ -12,6 +12,7 @@ import {
   AppointmentStatus,
   Role,
 } from '../../generated/prisma/client';
+import { FinanceService } from '../finance/finance.service';
 import { AppointmentsService } from './appointments.service';
 
 jest.setTimeout(20000);
@@ -37,7 +38,12 @@ describe('AppointmentsService (integração)', () => {
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [AppointmentsService, AuditService, PrismaService],
+      providers: [
+        AppointmentsService,
+        AuditService,
+        PrismaService,
+        FinanceService,
+      ],
     }).compile();
 
     service = moduleRef.get(AppointmentsService);

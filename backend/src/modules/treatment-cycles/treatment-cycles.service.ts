@@ -9,6 +9,7 @@ import {
   computeDiscountAmount,
   computeFinalValue,
 } from '../../common/utils/money.util';
+import { FinanceService } from '../finance/finance.service';
 import {
   AuditAction,
   CycleStatus,
@@ -52,6 +53,7 @@ export class TreatmentCyclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly finance: FinanceService,
   ) {}
 
   async listForPatient(tenantId: string, patientId: string) {
@@ -113,29 +115,49 @@ export class TreatmentCyclesService {
     const expectedEndDate = this.addMonths(startDate, plan.durationMonths);
     const cycleNumber = await this.nextCycleNumber(tenantId, patientId);
 
-    const created = await this.prisma.treatmentCycle.create({
-      data: {
+    const downPayment = dto.downPayment ?? 0;
+    const installmentCount = dto.installmentCount ?? plan.defaultInstallments;
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.treatmentCycle.create({
+        data: {
+          tenantId,
+          patientId,
+          planId: plan.id,
+          cycleNumber,
+          status: CycleStatus.ACTIVE,
+          startDate,
+          expectedEndDate,
+          appointmentCountPlanned: plan.suggestedAppointments,
+          intervalDaysPlanned: plan.suggestedIntervalDays,
+          contractedValue,
+          discountType,
+          discountValue,
+          discount,
+          finalValue,
+          downPayment,
+          installmentCount,
+          paymentMethodId: dto.paymentMethodId,
+          notes: dto.notes,
+          createdByUserId: actorUserId,
+        },
+        include: CYCLE_INCLUDE,
+      });
+
+      // Financeiro (Missão 0006): gera o calendário de parcelas a partir do
+      // valor já contratado aqui — nunca pede o mesmo dado de novo.
+      await this.finance.generateChargesForCycle(tx, {
+        id: created.id,
         tenantId,
         patientId,
-        planId: plan.id,
-        cycleNumber,
-        status: CycleStatus.ACTIVE,
         startDate,
-        expectedEndDate,
-        appointmentCountPlanned: plan.suggestedAppointments,
-        intervalDaysPlanned: plan.suggestedIntervalDays,
-        contractedValue,
-        discountType,
-        discountValue,
-        discount,
         finalValue,
-        downPayment: dto.downPayment ?? 0,
-        installmentCount: dto.installmentCount ?? plan.defaultInstallments,
-        paymentMethodId: dto.paymentMethodId,
-        notes: dto.notes,
-        createdByUserId: actorUserId,
-      },
-      include: CYCLE_INCLUDE,
+        downPayment,
+        installmentCount,
+        plan: { name: plan.name },
+      });
+
+      return created;
     });
 
     await this.audit.log({
@@ -224,21 +246,40 @@ export class TreatmentCyclesService {
       discountValue,
     );
     const finalValue = computeFinalValue(contractedValue, discount, 0);
+    const downPayment = dto.downPayment ?? Number(before.downPayment);
+    const installmentCount = dto.installmentCount ?? before.installmentCount;
 
-    const updated = await this.prisma.treatmentCycle.update({
-      where: { id },
-      data: {
-        contractedValue,
-        discountType,
-        discountValue,
-        discount,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.treatmentCycle.update({
+        where: { id },
+        data: {
+          contractedValue,
+          discountType,
+          discountValue,
+          discount,
+          finalValue,
+          paymentMethodId:
+            dto.paymentMethodId === undefined ? undefined : dto.paymentMethodId,
+          downPayment: dto.downPayment,
+          installmentCount: dto.installmentCount,
+        },
+        include: CYCLE_INCLUDE,
+      });
+
+      // Financeiro (Missão 0006): parcelas já pagas nunca são tocadas — só
+      // o saldo ainda pendente é redistribuído com o valor corrigido.
+      await this.finance.regenerateFuturePendingCharges(tx, {
+        id: updated.id,
+        tenantId,
+        patientId: updated.patientId,
+        startDate: updated.startDate,
         finalValue,
-        paymentMethodId:
-          dto.paymentMethodId === undefined ? undefined : dto.paymentMethodId,
-        downPayment: dto.downPayment,
-        installmentCount: dto.installmentCount,
-      },
-      include: CYCLE_INCLUDE,
+        downPayment,
+        installmentCount,
+        plan: { name: updated.plan.name },
+      });
+
+      return updated;
     });
 
     await this.audit.log({
@@ -273,14 +314,22 @@ export class TreatmentCyclesService {
       dto.status === CycleStatus.COMPLETED ||
       dto.status === CycleStatus.CANCELLED;
 
-    const updated = await this.prisma.treatmentCycle.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        closureReason: dto.closureReason,
-        actualEndDate: isClosing ? new Date() : undefined,
-      },
-      include: CYCLE_INCLUDE,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.treatmentCycle.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          closureReason: dto.closureReason,
+          actualEndDate: isClosing ? new Date() : undefined,
+        },
+        include: CYCLE_INCLUDE,
+      });
+
+      if (dto.status === CycleStatus.CANCELLED) {
+        await this.finance.cancelChargesForCycle(tx, tenantId, actorUserId, id);
+      }
+
+      return updated;
     });
 
     await this.audit.log({

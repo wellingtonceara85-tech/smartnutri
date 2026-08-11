@@ -10,6 +10,7 @@ import {
   computeDiscountAmount,
   computeFinalValue,
 } from '../../common/utils/money.util';
+import { FinanceService } from '../finance/finance.service';
 import {
   AppointmentStatus,
   AuditAction,
@@ -124,6 +125,7 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly finance: FinanceService,
   ) {}
 
   async list(tenantId: string, query: QueryAppointmentsDto) {
@@ -229,6 +231,25 @@ export class AppointmentsService {
           reason: 'Consulta criada',
         },
       });
+
+      // Financeiro (Missão 0006): só gera cobrança para consulta avulsa —
+      // vinculada a um ciclo, quem já cobre isso é o calendário de parcelas
+      // gerado na contratação (evita cobrar a mesma consulta duas vezes).
+      if (
+        !appointment.treatmentCycleId &&
+        appointment.standaloneValue != null
+      ) {
+        await this.finance.generateChargeForStandaloneAppointment(tx, {
+          id: appointment.id,
+          tenantId,
+          patientId: appointment.patientId,
+          scheduledAt: appointment.scheduledAt,
+          standaloneValue: appointment.standaloneValue,
+          standaloneDiscountValue: appointment.standaloneDiscountValue,
+          standaloneFinalValue: appointment.standaloneFinalValue,
+        });
+      }
+
       return appointment;
     });
 
@@ -444,6 +465,10 @@ export class AppointmentsService {
       { cancelledAt: new Date(), cancellationReason: dto.reason },
     );
 
+    // Financeiro (Missão 0006): cancela a cobrança avulsa ainda em aberto
+    // desta consulta, se houver — nunca mexe numa que já foi paga.
+    await this.finance.cancelChargeForAppointment(tenantId, actorUserId, id);
+
     await this.audit.log({
       tenantId,
       actorUserId,
@@ -567,6 +592,17 @@ export class AppointmentsService {
           reason: dto.reason ? `Reagendada: ${dto.reason}` : 'Reagendada',
         },
       });
+
+      // Financeiro (Missão 0006): a cobrança acompanha a consulta para o
+      // novo horário — nunca duplicada nem cancelada por um reagendamento.
+      await this.finance.transferChargeOnReschedule(
+        tx,
+        tenantId,
+        id,
+        created.id,
+        newStart,
+      );
+
       return created.id;
     });
 
