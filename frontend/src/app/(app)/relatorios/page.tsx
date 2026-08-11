@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, ClipboardList, Repeat, Users, Wallet } from 'lucide-react';
+import { CalendarDays, ClipboardList, Printer, Repeat, Users, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,6 +22,11 @@ function monthRange(date: Date) {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+function monthYearLabel(date: Date) {
+  const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 const NON_REALIZED_STATUSES = new Set(['CANCELLED_BY_CLINIC', 'CANCELLED_BY_PATIENT', 'RESCHEDULED']);
 
 /**
@@ -32,7 +37,10 @@ const NON_REALIZED_STATUSES = new Set(['CANCELLED_BY_CLINIC', 'CANCELLED_BY_PATI
  */
 export default function RelatoriosPage() {
   const { accessToken } = useTenantAuth();
-  const { start, end } = monthRange(new Date());
+  const now = new Date();
+  const { start, end } = monthRange(now);
+  const periodLabel = monthYearLabel(now);
+  const issuedAtLabel = now.toLocaleString('pt-BR');
 
   const activePatientsQuery = useQuery({
     queryKey: ['reports-active-patients'],
@@ -79,10 +87,19 @@ export default function RelatoriosPage() {
   const upcoming = appointments.filter((a) => !NON_REALIZED_STATUSES.has(a.status) && a.status !== 'DONE').length;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
-        <p className="text-sm text-muted-foreground">Indicadores do mês atual, a partir dos dados já cadastrados</p>
+    <div className="print-report flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
+          <p className="text-sm text-muted-foreground">
+            {periodLabel} · Indicadores do mês atual, a partir dos dados já cadastrados
+          </p>
+          <p className="text-xs text-muted-foreground">Emitido em {issuedAtLabel}</p>
+        </div>
+        <Button variant="outline" size="sm" className="no-print" onClick={() => window.print()}>
+          <Printer className="size-4" />
+          Imprimir relatório
+        </Button>
       </div>
 
       {isLoading ? (
@@ -90,7 +107,7 @@ export default function RelatoriosPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Card className="break-inside-avoid-page">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Pacientes ativos</CardTitle>
               </CardHeader>
@@ -101,13 +118,13 @@ export default function RelatoriosPage() {
                 </span>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="break-inside-avoid-page">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Ciclos ativos</CardTitle>
               </CardHeader>
               <CardContent className="text-2xl font-semibold">{activeCyclesQuery.data?.total ?? 0}</CardContent>
             </Card>
-            <Card>
+            <Card className="break-inside-avoid-page">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Recebido no mês</CardTitle>
               </CardHeader>
@@ -115,7 +132,7 @@ export default function RelatoriosPage() {
                 {currencyFormat(financeSummaryQuery.data?.recebidoNoPeriodo ?? 0)}
               </CardContent>
             </Card>
-            <Card>
+            <Card className="break-inside-avoid-page">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Vencido</CardTitle>
               </CardHeader>
@@ -125,7 +142,7 @@ export default function RelatoriosPage() {
             </Card>
           </div>
 
-          <Card>
+          <Card className="break-inside-avoid-page">
             <CardHeader>
               <CardTitle className="text-base">Atendimentos no mês</CardTitle>
             </CardHeader>
@@ -148,7 +165,7 @@ export default function RelatoriosPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="break-inside-avoid-page">
             <CardHeader>
               <CardTitle className="text-base">A receber</CardTitle>
             </CardHeader>
@@ -162,7 +179,7 @@ export default function RelatoriosPage() {
         </>
       )}
 
-      <Card>
+      <Card className="no-print">
         <CardHeader>
           <CardTitle className="text-base">Atalhos</CardTitle>
         </CardHeader>

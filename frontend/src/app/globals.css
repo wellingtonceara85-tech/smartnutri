@@ -142,3 +142,29 @@
     @apply font-sans;
   }
 }
+
+/* Impressão do Relatório — escopado a `.print-report` (só a tela /relatorios
+   tem essa classe), nunca muda a impressão de outra tela do app. */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  body:has(.print-report) aside,
+  body:has(.print-report) header {
+    display: none !important;
+  }
+
+  body:has(.print-report) main {
+    padding: 0 !important;
+  }
+
+  .print-report .no-print {
+    display: none !important;
+  }
+
+  .print-report .text-muted-foreground {
+    color: #444 !important;
+  }
+}
