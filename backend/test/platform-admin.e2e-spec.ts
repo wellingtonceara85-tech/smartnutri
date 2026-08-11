@@ -304,6 +304,8 @@ describe('Platform Admin (e2e)', () => {
   });
 
   describe('Criação de clientes', () => {
+    let soloTenantId: string;
+
     it('cria cliente SOLO com exatamente um usuário proprietário (ADMIN)', async () => {
       const res = await request(app.getHttpServer())
         .post('/platform/tenants')
@@ -328,9 +330,21 @@ describe('Platform Admin (e2e)', () => {
       });
       expect(memberships).toHaveLength(1);
       expect(memberships[0].role).toBe(Role.ADMIN);
+
+      // Missão 0005.9 — todo tenant novo já nasce com os catálogos mínimos.
+      const types = await prisma.appointmentType.findMany({
+        where: { tenantId: body.tenant.id },
+      });
+      const methods = await prisma.paymentMethod.findMany({
+        where: { tenantId: body.tenant.id },
+      });
+      expect(types).toHaveLength(6);
+      expect(methods).toHaveLength(7);
+
+      soloTenantId = body.tenant.id;
     });
 
-    it('cria cliente CLINIC normalmente', async () => {
+    it('cria cliente CLINIC normalmente, com os mesmos catálogos mínimos (Missão 0005.9)', async () => {
       const res = await request(app.getHttpServer())
         .post('/platform/tenants')
         .set('Authorization', `Bearer ${platformAdminToken}`)
@@ -344,7 +358,30 @@ describe('Platform Admin (e2e)', () => {
         })
         .expect(201);
 
-      expect((res.body as CreateTenantResponseBody).tenant.type).toBe('CLINIC');
+      const body = res.body as CreateTenantResponseBody;
+      expect(body.tenant.type).toBe('CLINIC');
+
+      const types = await prisma.appointmentType.findMany({
+        where: { tenantId: body.tenant.id },
+      });
+      const methods = await prisma.paymentMethod.findMany({
+        where: { tenantId: body.tenant.id },
+      });
+      expect(types).toHaveLength(6);
+      expect(methods).toHaveLength(7);
+
+      // Isolamento: os IDs dos catálogos do CLINIC não podem colidir com os do SOLO criado no teste anterior.
+      const soloTypeIds = new Set(
+        (
+          await prisma.appointmentType.findMany({
+            where: { tenantId: soloTenantId },
+            select: { id: true },
+          })
+        ).map((t) => t.id),
+      );
+      for (const t of types) {
+        expect(soloTypeIds.has(t.id)).toBe(false);
+      }
     });
 
     it('ADMIN de tenant não consegue criar cliente (403)', async () => {

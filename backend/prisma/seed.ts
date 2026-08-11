@@ -12,6 +12,10 @@ import {
   Role,
 } from '../src/generated/prisma/client';
 import { computeDiscountAmount, computeFinalValue } from '../src/common/utils/money.util';
+import {
+  DEFAULT_APPOINTMENT_TYPES,
+  provisionDefaultCatalogs,
+} from '../src/common/tenant-provisioning/default-catalogs';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -245,42 +249,10 @@ async function main() {
     'nutricionista@clinicademo.com.br',
   )!;
 
-  const paymentMethods = [
-    'PIX',
-    'Dinheiro',
-    'Cartão de Crédito',
-    'Cartão de Débito',
-    'Transferência',
-    'Boleto',
-    'Outro',
-  ];
-  for (const name of paymentMethods) {
-    await prisma.paymentMethod.upsert({
-      where: { tenantId_name: { tenantId: tenant.id, name } },
-      update: {},
-      create: { tenantId: tenant.id, name },
-    });
-  }
-
-  const appointmentTypes: { name: string; defaultDurationMinutes: number }[] = [
-    { name: 'Primeira consulta', defaultDurationMinutes: 60 },
-    { name: 'Retorno', defaultDurationMinutes: 40 },
-    { name: 'Avaliação', defaultDurationMinutes: 60 },
-    { name: 'Acompanhamento', defaultDurationMinutes: 30 },
-    { name: 'Encaixe', defaultDurationMinutes: 20 },
-    { name: 'Outro', defaultDurationMinutes: 30 },
-  ];
-  for (const type of appointmentTypes) {
-    await prisma.appointmentType.upsert({
-      where: { tenantId_name: { tenantId: tenant.id, name: type.name } },
-      update: {},
-      create: {
-        tenantId: tenant.id,
-        name: type.name,
-        defaultDurationMinutes: type.defaultDurationMinutes,
-      },
-    });
-  }
+  // Mesma provisão que todo tenant novo recebe automaticamente (Missão 0005.9)
+  // — reaproveitada aqui para o tenant demo, em vez de duplicar a lista.
+  await provisionDefaultCatalogs(prisma, tenant.id);
+  await provisionDefaultCatalogs(prisma, soloTenant.id);
 
   await upsertPlan(tenant.id, {
     name: 'Plano Trimestral',
@@ -1130,7 +1102,7 @@ async function main() {
 
   if (existingAppointmentsCount === 0) {
     const typeIdByName = new Map<string, string>();
-    for (const type of appointmentTypes) {
+    for (const type of DEFAULT_APPOINTMENT_TYPES) {
       const record = await prisma.appointmentType.findFirstOrThrow({
         where: { tenantId: tenant.id, name: type.name },
       });
@@ -1267,7 +1239,7 @@ async function main() {
     ];
 
     const typeDurationByName = new Map(
-      appointmentTypes.map((t) => [t.name, t.defaultDurationMinutes]),
+      DEFAULT_APPOINTMENT_TYPES.map((t) => [t.name, t.defaultDurationMinutes]),
     );
 
     for (const fixture of fixtures) {

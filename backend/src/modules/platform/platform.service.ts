@@ -11,6 +11,7 @@ import {
   resolvePlanForTenant,
 } from '../../common/plans/plan-catalog';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { provisionDefaultCatalogs } from '../../common/tenant-provisioning/default-catalogs';
 import {
   AuditAction,
   Prisma,
@@ -261,6 +262,10 @@ export class PlatformService {
           email: dto.email.toLowerCase(),
         },
       });
+
+      // Mesmo provisionamento para SOLO e CLINIC — sem catálogos mínimos,
+      // Agenda/Contratação nascem sem opção nenhuma para escolher (Missão 0005.9).
+      await provisionDefaultCatalogs(tx, tenant.id);
 
       return { tenant, owner };
     });
