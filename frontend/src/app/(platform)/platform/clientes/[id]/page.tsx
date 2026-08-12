@@ -3,7 +3,7 @@
 import { use, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Ban, Play, Repeat } from 'lucide-react';
+import { Ban, Copy, KeyRound, Play, Repeat } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,12 +32,19 @@ import {
   getPlatformTenant,
   listPlatformPlans,
   listPlatformTenantUsers,
+  resetPlatformUserPassword,
   suspendPlatformTenant,
 } from '@/lib/api/platform';
 import { ApiError } from '@/lib/api-client';
 import { usePlatformAuth } from '@/lib/auth-context';
 import { formatCalendarDate } from '@/lib/masks';
-import { TENANT_STATUS_LABELS, TENANT_TYPE_LABELS, type PlanCode, type TenantStatus } from '@/lib/types';
+import {
+  TENANT_STATUS_LABELS,
+  TENANT_TYPE_LABELS,
+  type PlanCode,
+  type PlatformTenantUser,
+  type TenantStatus,
+} from '@/lib/types';
 
 const STATUS_BADGE_VARIANT: Record<TenantStatus, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   TRIAL: 'outline',
@@ -60,6 +67,8 @@ export default function PlatformClienteDetailPage({ params }: { params: Promise<
   const [changePlanOpen, setChangePlanOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanCode | ''>('');
   const [busy, setBusy] = useState(false);
+  const [resetTarget, setResetTarget] = useState<PlatformTenantUser | null>(null);
+  const [resetResult, setResetResult] = useState<{ email: string; temporaryPassword: string } | null>(null);
 
   const tenantQuery = useQuery({
     queryKey: ['platform-tenant', id],
@@ -136,6 +145,31 @@ export default function PlatformClienteDetailPage({ params }: { params: Promise<
       toast.error(error instanceof ApiError ? error.message : 'Não foi possível alterar o plano');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!accessToken || !resetTarget) return;
+    setBusy(true);
+    try {
+      const result = await resetPlatformUserPassword(accessToken, resetTarget.userClinicId);
+      setResetResult({ email: resetTarget.email, temporaryPassword: result.temporaryPassword });
+      toast.success('Senha redefinida — a senha anterior parou de funcionar');
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Não foi possível redefinir a senha');
+    } finally {
+      setBusy(false);
+      setResetTarget(null);
+    }
+  }
+
+  async function handleCopyPassword() {
+    if (!resetResult) return;
+    try {
+      await navigator.clipboard.writeText(resetResult.temporaryPassword);
+      toast.success('Senha copiada');
+    } catch {
+      toast.error('Não foi possível copiar a senha');
     }
   }
 
@@ -257,6 +291,10 @@ export default function PlatformClienteDetailPage({ params }: { params: Promise<
                   {u.lastLoginAt && (
                     <span className="text-xs text-muted-foreground">Último acesso {formatCalendarDate(u.lastLoginAt)}</span>
                   )}
+                  <Button variant="outline" size="sm" onClick={() => setResetTarget(u)} disabled={busy}>
+                    <KeyRound className="size-4" />
+                    Redefinir senha
+                  </Button>
                 </div>
               </div>
             ))
@@ -279,6 +317,55 @@ export default function PlatformClienteDetailPage({ params }: { params: Promise<
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Redefinir senha</AlertDialogTitle>
+            <AlertDialogDescription>
+              Uma nova senha provisória será gerada para {resetTarget?.name} e a senha atual deixará de funcionar
+              imediatamente. Você verá a nova senha uma única vez, na próxima tela.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleResetPassword}>Redefinir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!resetResult} onOpenChange={() => setResetResult(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Senha redefinida</DialogTitle>
+            <DialogDescription>
+              <strong className="text-foreground">Esta senha será exibida apenas uma vez.</strong> Repasse ao usuário
+              por um canal seguro e peça para trocar no primeiro acesso.
+            </DialogDescription>
+          </DialogHeader>
+          {resetResult && (
+            <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 text-sm">
+              <p>
+                <span className="text-muted-foreground">E-mail: </span>
+                <span className="font-mono">{resetResult.email}</span>
+              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p>
+                  <span className="text-muted-foreground">Nova senha: </span>
+                  <span className="font-mono">{resetResult.temporaryPassword}</span>
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={handleCopyPassword}>
+                  <Copy className="size-4" />
+                  Copiar senha
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setResetResult(null)}>Entendi</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={changePlanOpen} onOpenChange={setChangePlanOpen}>
         <DialogContent>

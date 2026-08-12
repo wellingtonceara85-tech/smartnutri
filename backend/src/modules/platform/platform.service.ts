@@ -198,6 +198,9 @@ export class PlatformService {
 
     return memberships.map((membership) => ({
       id: membership.user.id,
+      // Id do vínculo (UserClinic) — é o que /platform/users/:id/reset-password,
+      // /activate e /suspend esperam, nunca o User.id acima.
+      userClinicId: membership.id,
       name: membership.user.name,
       email: membership.user.email,
       role: membership.role,

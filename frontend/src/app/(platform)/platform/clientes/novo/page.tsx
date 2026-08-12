@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -46,6 +47,16 @@ export default function NovoClientePage() {
     email: string;
     temporaryPassword: string;
   } | null>(null);
+
+  async function handleCopyPassword() {
+    if (!createdCredentials) return;
+    try {
+      await navigator.clipboard.writeText(createdCredentials.temporaryPassword);
+      toast.success('Senha copiada');
+    } catch {
+      toast.error('Não foi possível copiar a senha');
+    }
+  }
 
   const plansQuery = useQuery({
     queryKey: ['platform-plans'],
@@ -211,8 +222,8 @@ export default function NovoClientePage() {
           <DialogHeader>
             <DialogTitle>Cliente criado</DialogTitle>
             <DialogDescription>
-              Senha provisória — mostrada só desta vez. Repasse ao cliente por um canal seguro e peça para trocar no
-              primeiro acesso.
+              <strong className="text-foreground">Esta senha será exibida apenas uma vez.</strong> Repasse ao cliente
+              por um canal seguro e peça para trocar no primeiro acesso.
             </DialogDescription>
           </DialogHeader>
           {createdCredentials && (
@@ -221,10 +232,16 @@ export default function NovoClientePage() {
                 <span className="text-muted-foreground">E-mail: </span>
                 <span className="font-mono">{createdCredentials.email}</span>
               </p>
-              <p>
-                <span className="text-muted-foreground">Senha provisória: </span>
-                <span className="font-mono">{createdCredentials.temporaryPassword}</span>
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p>
+                  <span className="text-muted-foreground">Senha provisória: </span>
+                  <span className="font-mono">{createdCredentials.temporaryPassword}</span>
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={handleCopyPassword}>
+                  <Copy className="size-4" />
+                  Copiar senha
+                </Button>
+              </div>
             </div>
           )}
           <DialogFooter>

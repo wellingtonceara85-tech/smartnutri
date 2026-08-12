@@ -998,6 +998,7 @@ export interface PlatformTenantDetail extends PlatformTenantListItem {
 
 export interface PlatformTenantUser {
   id: string;
+  userClinicId: string;
   name: string;
   email: string;
   role: 'ADMIN' | 'NUTRITIONIST' | 'RECEPTION';

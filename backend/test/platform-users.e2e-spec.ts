@@ -7,7 +7,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/common/prisma/prisma.service';
-import { Role, TenantType } from '../src/generated/prisma/client';
+import { Role, TenantStatus, TenantType } from '../src/generated/prisma/client';
 
 interface PlatformUserItem {
   id: string;
@@ -31,6 +31,12 @@ interface CreatePlatformUserResponseBody {
 
 interface ResetPasswordResponseBody {
   temporaryPassword: string;
+}
+
+interface PlatformTenantUserItem {
+  id: string;
+  userClinicId: string;
+  email: string;
 }
 
 interface ErrorResponseBody {
@@ -300,6 +306,68 @@ describe('Platform Users (e2e)', () => {
       .post('/auth/login')
       .send({ email: created.user.email, password: temporaryPassword })
       .expect(200);
+  });
+
+  it('userClinicId de /platform/tenants/:id/users é o id aceito por /platform/users/:id/reset-password', async () => {
+    const created = await createUserWithRole(
+      tenantClinicA.id,
+      Role.NUTRITIONIST,
+      'ParaListaEReset',
+    );
+
+    const listRes = await request(app.getHttpServer())
+      .get(`/platform/tenants/${tenantClinicA.id}/users`)
+      .set('Authorization', `Bearer ${platformAdminToken}`)
+      .expect(200);
+    const listed = (listRes.body as PlatformTenantUserItem[]).find(
+      (u) => u.email === created.user.email,
+    );
+    expect(listed?.userClinicId).toBe(created.userClinic.id);
+
+    const resetRes = await request(app.getHttpServer())
+      .post(`/platform/users/${listed!.userClinicId}/reset-password`)
+      .set('Authorization', `Bearer ${platformAdminToken}`)
+      .expect(201);
+    const { temporaryPassword } = resetRes.body as ResetPasswordResponseBody;
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: created.user.email, password: temporaryPassword })
+      .expect(200);
+  });
+
+  it('redefinir a senha de um usuário de tenant suspenso não reativa o tenant', async () => {
+    const suspendedTenant = await prisma.tenant.create({
+      data: {
+        name: `Tenant Suspenso Reset ${runId}`,
+        slug: `platusr-suspenso-${runId}`,
+        email: 'suspenso@teste.com',
+        phone: '44444444',
+        type: TenantType.CLINIC,
+        status: TenantStatus.SUSPENDED,
+      },
+    });
+    const owner = await createUserWithRole(
+      suspendedTenant.id,
+      Role.ADMIN,
+      'DonoSuspensoReset',
+    );
+
+    await request(app.getHttpServer())
+      .post(`/platform/users/${owner.userClinic.id}/reset-password`)
+      .set('Authorization', `Bearer ${platformAdminToken}`)
+      .expect(201);
+
+    const tenantAfter = await prisma.tenant.findUniqueOrThrow({
+      where: { id: suspendedTenant.id },
+    });
+    expect(tenantAfter.status).toBe(TenantStatus.SUSPENDED);
+
+    await prisma.userClinic.deleteMany({
+      where: { tenantId: suspendedTenant.id },
+    });
+    await prisma.tenant.delete({ where: { id: suspendedTenant.id } });
+    await prisma.user.delete({ where: { id: owner.user.id } });
   });
 
   it('suspende o usuário (bloqueia login) e reativa (restaura login) sem afetar o tenant', async () => {
