@@ -17,6 +17,7 @@ import {
   Prisma,
   Role,
   Tenant,
+  TenantType,
 } from '../../generated/prisma/client';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -66,11 +67,20 @@ export class UsersService {
   /**
    * Lista enxuta de nutricionistas ativos do tenant — acessível a
    * qualquer perfil autenticado, para popular o seletor de "nutricionista
-   * responsável" no cadastro de pacientes.
+   * responsável" no cadastro de pacientes e no agendamento. No plano
+   * Independente (SOLO) o próprio ADMIN é a nutricionista da clínica —
+   * mesma equivalência já usada em platform.service.ts.
    */
   async listNutritionistsForTenant(tenantId: string) {
     const memberships = await this.prisma.userClinic.findMany({
-      where: { tenantId, isActive: true, role: Role.NUTRITIONIST },
+      where: {
+        tenantId,
+        isActive: true,
+        OR: [
+          { role: Role.NUTRITIONIST },
+          { role: Role.ADMIN, tenant: { type: TenantType.SOLO } },
+        ],
+      },
       include: { user: { select: { id: true, name: true } } },
       orderBy: { user: { name: 'asc' } },
     });

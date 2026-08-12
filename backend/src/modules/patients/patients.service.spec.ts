@@ -7,7 +7,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { Role } from '../../generated/prisma/client';
+import { Role, TenantType } from '../../generated/prisma/client';
 import { PatientsService } from './patients.service';
 
 /**
@@ -241,5 +241,103 @@ describe('PatientsService (integração)', () => {
     await expect(
       service.getById(tenantA.id, patientInB.id),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('PatientsService — nutricionista responsável no plano Independente (integração)', () => {
+  let service: PatientsService;
+  let prisma: PrismaService;
+
+  let soloTenant: { id: string };
+  let soloAdmin: { id: string };
+  let clinicTenant: { id: string };
+  let clinicAdmin: { id: string };
+
+  const runId = Date.now();
+
+  beforeAll(async () => {
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      providers: [PatientsService, AuditService, PrismaService],
+    }).compile();
+
+    service = moduleRef.get(PatientsService);
+    prisma = moduleRef.get(PrismaService);
+    await prisma.$connect();
+
+    soloTenant = await prisma.tenant.create({
+      data: {
+        name: 'Tenant Independente Paciente',
+        slug: `patient-solo-${runId}`,
+        email: 'solo@teste.com',
+        phone: '11111111',
+        type: TenantType.SOLO,
+      },
+    });
+    soloAdmin = await prisma.user.create({
+      data: {
+        name: 'Admin Independente Paciente',
+        email: `admin-solo-patient-${runId}@teste.com`,
+        passwordHash: 'x',
+      },
+    });
+    await prisma.userClinic.create({
+      data: { userId: soloAdmin.id, tenantId: soloTenant.id, role: Role.ADMIN },
+    });
+
+    clinicTenant = await prisma.tenant.create({
+      data: {
+        name: 'Tenant Clínica Paciente',
+        slug: `patient-clinic-only-admin-${runId}`,
+        email: 'clinic@teste.com',
+        phone: '22222222',
+        type: TenantType.CLINIC,
+      },
+    });
+    clinicAdmin = await prisma.user.create({
+      data: {
+        name: 'Admin Clínica Paciente',
+        email: `admin-clinic-patient-${runId}@teste.com`,
+        passwordHash: 'x',
+      },
+    });
+    await prisma.userClinic.create({
+      data: {
+        userId: clinicAdmin.id,
+        tenantId: clinicTenant.id,
+        role: Role.ADMIN,
+      },
+    });
+  }, 30000);
+
+  afterAll(async () => {
+    await prisma.patient.deleteMany({
+      where: { tenantId: { in: [soloTenant.id, clinicTenant.id] } },
+    });
+    await prisma.userClinic.deleteMany({
+      where: { userId: { in: [soloAdmin.id, clinicAdmin.id] } },
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: [soloAdmin.id, clinicAdmin.id] } },
+    });
+    await prisma.tenant.delete({ where: { id: soloTenant.id } });
+    await prisma.tenant.delete({ where: { id: clinicTenant.id } });
+    await prisma.$disconnect();
+  });
+
+  it('permite ao ADMIN do plano Independente se autoatribuir como nutricionista responsável do paciente', async () => {
+    const patient = await service.create(soloTenant.id, soloAdmin.id, {
+      fullName: 'Paciente Independente',
+      responsibleNutritionistId: soloAdmin.id,
+    });
+    expect(patient.responsibleNutritionistId).toBe(soloAdmin.id);
+  });
+
+  it('rejeita o ADMIN de um tenant CLINIC comum como responsável pelo paciente', async () => {
+    await expect(
+      service.create(clinicTenant.id, clinicAdmin.id, {
+        fullName: 'Paciente Clínica Sem Nutricionista',
+        responsibleNutritionistId: clinicAdmin.id,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

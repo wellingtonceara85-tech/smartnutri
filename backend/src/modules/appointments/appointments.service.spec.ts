@@ -11,6 +11,7 @@ import {
   AppointmentModality,
   AppointmentStatus,
   Role,
+  TenantType,
 } from '../../generated/prisma/client';
 import { FinanceService } from '../finance/finance.service';
 import { AppointmentsService } from './appointments.service';
@@ -1026,5 +1027,163 @@ describe('AppointmentsService (integração)', () => {
 
     expect(rescheduled.standaloneValue?.toString()).toBe('250');
     expect(rescheduled.standaloneFinalValue?.toString()).toBe('200');
+  });
+});
+
+// ---------------------------------------------------------------------
+// Plano Independente (SOLO): o próprio ADMIN é a nutricionista responsável
+// ---------------------------------------------------------------------
+
+describe('AppointmentsService — nutricionista responsável no plano Independente (integração)', () => {
+  let service: AppointmentsService;
+  let prisma: PrismaService;
+
+  let soloTenant: { id: string };
+  let soloAdmin: { id: string };
+  let clinicTenant: { id: string };
+  let clinicAdmin: { id: string };
+  let patient: { id: string };
+  let clinicPatient: { id: string };
+  let apptType: { id: string };
+  let clinicApptType: { id: string };
+
+  const runId = Date.now();
+  const day = '2026-11-09';
+
+  beforeAll(async () => {
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      providers: [
+        AppointmentsService,
+        AuditService,
+        PrismaService,
+        FinanceService,
+      ],
+    }).compile();
+
+    service = moduleRef.get(AppointmentsService);
+    prisma = moduleRef.get(PrismaService);
+    await prisma.$connect();
+
+    soloTenant = await prisma.tenant.create({
+      data: {
+        name: 'Tenant Independente Appt',
+        slug: `appt-solo-${runId}`,
+        email: 'solo@teste.com',
+        phone: '11111111',
+        type: TenantType.SOLO,
+      },
+    });
+    soloAdmin = await prisma.user.create({
+      data: {
+        name: 'Admin Independente Appt',
+        email: `admin-solo-appt-${runId}@teste.com`,
+        passwordHash: 'x',
+      },
+    });
+    await prisma.userClinic.create({
+      data: { userId: soloAdmin.id, tenantId: soloTenant.id, role: Role.ADMIN },
+    });
+    patient = await prisma.patient.create({
+      data: { tenantId: soloTenant.id, fullName: 'Paciente Independente Appt' },
+    });
+    apptType = await prisma.appointmentType.create({
+      data: {
+        tenantId: soloTenant.id,
+        name: 'Retorno',
+        defaultDurationMinutes: 40,
+      },
+    });
+
+    // Tenant CLINIC (multiusuário) sem nutricionista cadastrado, para provar
+    // que a equivalência SOLO não vaza para outros tipos de tenant.
+    clinicTenant = await prisma.tenant.create({
+      data: {
+        name: 'Tenant Clínica Appt',
+        slug: `appt-clinic-only-admin-${runId}`,
+        email: 'clinic@teste.com',
+        phone: '22222222',
+        type: TenantType.CLINIC,
+      },
+    });
+    clinicAdmin = await prisma.user.create({
+      data: {
+        name: 'Admin Clínica Appt',
+        email: `admin-clinic-appt-${runId}@teste.com`,
+        passwordHash: 'x',
+      },
+    });
+    await prisma.userClinic.create({
+      data: {
+        userId: clinicAdmin.id,
+        tenantId: clinicTenant.id,
+        role: Role.ADMIN,
+      },
+    });
+    clinicPatient = await prisma.patient.create({
+      data: { tenantId: clinicTenant.id, fullName: 'Paciente Clínica Appt' },
+    });
+    clinicApptType = await prisma.appointmentType.create({
+      data: {
+        tenantId: clinicTenant.id,
+        name: 'Retorno',
+        defaultDurationMinutes: 40,
+      },
+    });
+  }, 30000);
+
+  afterAll(async () => {
+    await prisma.appointmentStatusHistory.deleteMany({
+      where: { tenantId: { in: [soloTenant.id, clinicTenant.id] } },
+    });
+    await prisma.appointment.deleteMany({
+      where: { tenantId: { in: [soloTenant.id, clinicTenant.id] } },
+    });
+    await prisma.appointmentType.deleteMany({
+      where: { tenantId: { in: [soloTenant.id, clinicTenant.id] } },
+    });
+    await prisma.patient.deleteMany({
+      where: { id: { in: [patient.id, clinicPatient.id] } },
+    });
+    await prisma.userClinic.deleteMany({
+      where: { userId: { in: [soloAdmin.id, clinicAdmin.id] } },
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: [soloAdmin.id, clinicAdmin.id] } },
+    });
+    await prisma.tenant.delete({ where: { id: soloTenant.id } });
+    await prisma.tenant.delete({ where: { id: clinicTenant.id } });
+    await prisma.$disconnect();
+  });
+
+  it('permite ao ADMIN do plano Independente se autoatribuir como nutricionista responsável', async () => {
+    const created = await service.create(
+      soloTenant.id,
+      soloAdmin.id,
+      Role.ADMIN,
+      {
+        patientId: patient.id,
+        nutritionistUserId: soloAdmin.id,
+        appointmentTypeId: apptType.id,
+        scheduledAt: `${day}T14:00:00.000Z`,
+        durationMinutes: 40,
+        modality: AppointmentModality.IN_PERSON,
+        isConfirmed: false,
+      },
+    );
+    expect(created.nutritionistUserId).toBe(soloAdmin.id);
+  });
+
+  it('rejeita o ADMIN de um tenant CLINIC comum se autoatribuir como nutricionista', async () => {
+    await expect(
+      service.create(clinicTenant.id, clinicAdmin.id, Role.ADMIN, {
+        patientId: clinicPatient.id,
+        nutritionistUserId: clinicAdmin.id,
+        appointmentTypeId: clinicApptType.id,
+        scheduledAt: `${day}T15:00:00.000Z`,
+        durationMinutes: 40,
+        modality: AppointmentModality.IN_PERSON,
+        isConfirmed: false,
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

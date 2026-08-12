@@ -8,7 +8,12 @@ import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { normalizeCpf } from '../../common/utils/cpf.util';
 import { normalizePhone } from '../../common/utils/phone.util';
-import { AuditAction, Prisma, Role } from '../../generated/prisma/client';
+import {
+  AuditAction,
+  Prisma,
+  Role,
+  TenantType,
+} from '../../generated/prisma/client';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { QueryPatientsDto } from './dto/query-patients.dto';
 import { UpdatePatientStatusDto } from './dto/update-patient-status.dto';
@@ -296,13 +301,15 @@ export class PatientsService {
   ) {
     const membership = await this.prisma.userClinic.findUnique({
       where: { userId_tenantId: { userId: nutritionistUserId, tenantId } },
+      include: { tenant: { select: { type: true } } },
     });
 
-    if (
-      !membership ||
-      !membership.isActive ||
-      membership.role !== Role.NUTRITIONIST
-    ) {
+    // No plano Independente (SOLO) o próprio ADMIN é a nutricionista da clínica — mesma equivalência de platform.service.ts.
+    const isValidNutritionist =
+      membership?.role === Role.NUTRITIONIST ||
+      (membership?.role === Role.ADMIN &&
+        membership.tenant.type === TenantType.SOLO);
+    if (!membership || !membership.isActive || !isValidNutritionist) {
       throw new BadRequestException(
         'Nutricionista responsável inválido para esta clínica',
       );

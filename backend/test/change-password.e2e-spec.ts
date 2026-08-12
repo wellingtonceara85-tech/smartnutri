@@ -32,7 +32,11 @@ describe('Change own password (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
 
@@ -96,7 +100,10 @@ describe('Change own password (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: `usuario-senha-e2e-${runId}@teste.com`, password: ORIGINAL_PASSWORD })
+      .send({
+        email: `usuario-senha-e2e-${runId}@teste.com`,
+        password: ORIGINAL_PASSWORD,
+      })
       .expect(200);
   });
 
@@ -109,12 +116,18 @@ describe('Change own password (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: `usuario-senha-e2e-${runId}@teste.com`, password: ORIGINAL_PASSWORD })
+      .send({
+        email: `usuario-senha-e2e-${runId}@teste.com`,
+        password: ORIGINAL_PASSWORD,
+      })
       .expect(401);
 
     await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: `usuario-senha-e2e-${runId}@teste.com`, password: 'NovaSenha456' })
+      .send({
+        email: `usuario-senha-e2e-${runId}@teste.com`,
+        password: 'NovaSenha456',
+      })
       .expect(200);
   });
 });

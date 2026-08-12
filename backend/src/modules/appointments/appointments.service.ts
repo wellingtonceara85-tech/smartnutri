@@ -17,6 +17,7 @@ import {
   CycleStatus,
   Prisma,
   Role,
+  TenantType,
 } from '../../generated/prisma/client';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CompleteAppointmentDto } from './dto/complete-appointment.dto';
@@ -854,12 +855,14 @@ export class AppointmentsService {
 
     const membership = await this.prisma.userClinic.findUnique({
       where: { userId_tenantId: { userId: candidateId, tenantId } },
+      include: { tenant: { select: { type: true } } },
     });
-    if (
-      !membership ||
-      !membership.isActive ||
-      membership.role !== Role.NUTRITIONIST
-    ) {
+    // No plano Independente (SOLO) o próprio ADMIN é a nutricionista da clínica — mesma equivalência de platform.service.ts.
+    const isValidNutritionist =
+      membership?.role === Role.NUTRITIONIST ||
+      (membership?.role === Role.ADMIN &&
+        membership.tenant.type === TenantType.SOLO);
+    if (!membership || !membership.isActive || !isValidNutritionist) {
       throw new BadRequestException(
         'Nutricionista informado é inválido para esta clínica',
       );
